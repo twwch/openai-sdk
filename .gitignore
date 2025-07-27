@@ -80,3 +80,6 @@ settings-central.xml
 settings-ossrh.xml
 export-gpg-key.sh
 GITHUB_RELEASE_SETUP.md
+gpg-private-key.asc
+github-secrets-guide.md
+gpg-private-key-base64.txt
