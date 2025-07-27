@@ -8,6 +8,11 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      issues: write
+      pull-requests: write
     
     steps:
     - name: Checkout code
@@ -135,4 +140,4 @@ jobs:
         draft: false
         prerelease: false
         generateReleaseNotes: true
-        token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
