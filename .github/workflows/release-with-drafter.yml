@@ -1,13 +1,16 @@
-name: Release to Maven Central
+name: Release to Maven Central (with Release Drafter)
 
 on:
   push:
     tags:
-      - 'v*'  # 触发条件：推送以 v 开头的 tag，如 v1.0.0
+      - 'v*'
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     
     steps:
     - name: Checkout code
@@ -104,35 +107,12 @@ jobs:
           -Dgpg.pinentry-mode=loopback \
           -Darguments=-Dgpg.passphrase="$GPG_PASSPHRASE"
     
-    - name: Create GitHub Release
-      uses: ncipollo/release-action@v1
+    - name: Create Release with Release Drafter
+      uses: release-drafter/release-drafter@v6
       with:
+        config-name: release-drafter.yml
+        version: ${{ steps.get_version.outputs.VERSION }}
+        publish: true
         tag: v${{ steps.get_version.outputs.VERSION }}
-        name: Release v${{ steps.get_version.outputs.VERSION }}
-        body: |
-          ## OpenAI Java SDK v${{ steps.get_version.outputs.VERSION }}
-          
-          ### Maven Dependency
-          
-          ```xml
-          <dependency>
-              <groupId>io.github.twwch</groupId>
-              <artifactId>openai-sdk</artifactId>
-              <version>${{ steps.get_version.outputs.VERSION }}</version>
-          </dependency>
-          ```
-          
-          ### Gradle Dependency
-          
-          ```gradle
-          implementation 'io.github.twwch:openai-sdk:${{ steps.get_version.outputs.VERSION }}'
-          ```
-          
-          ### Links
-          
-          - [Maven Central](https://central.sonatype.com/artifact/io.github.twwch/openai-sdk/${{ steps.get_version.outputs.VERSION }})
-          - [Documentation](https://github.com/twwch/openai-sdk/blob/main/README.md)
-        draft: false
-        prerelease: false
-        generateReleaseNotes: true
-        token: ${{ secrets.GITHUB_TOKEN }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
