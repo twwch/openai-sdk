@@ -7,6 +7,9 @@ import io.github.twwch.openai.sdk.AzureOpenAIConfig;
 import io.github.twwch.openai.sdk.OpenAIConfig;
 import io.github.twwch.openai.sdk.exception.OpenAIException;
 import okhttp3.*;
+import okhttp3.sse.EventSource;
+import okhttp3.sse.EventSourceListener;
+import okhttp3.sse.EventSources;
 
 import java.io.IOException;
 import java.util.Map;
@@ -23,10 +26,13 @@ public class OpenAIHttpClient {
     public OpenAIHttpClient(OpenAIConfig config) {
         this.config = config;
         this.objectMapper = new ObjectMapper();
+        
+        // 为流式请求创建一个带有较短保持时间的OkHttpClient
         this.client = new OkHttpClient.Builder()
                 .connectTimeout(config.getTimeout(), TimeUnit.SECONDS)
                 .readTimeout(config.getTimeout(), TimeUnit.SECONDS)
                 .writeTimeout(config.getTimeout(), TimeUnit.SECONDS)
+                .connectionPool(new ConnectionPool(5, 5, TimeUnit.SECONDS)) // 5秒后关闭空闲连接
                 .build();
     }
 
@@ -185,5 +191,52 @@ public class OpenAIHttpClient {
         }
 
         throw new OpenAIException(message, statusCode, errorType, errorCode);
+    }
+
+    /**
+     * 执行流式POST请求
+     *
+     * @param endpoint API端点
+     * @param body     请求体
+     * @param listener 事件监听器
+     * @return EventSource 对象，用于关闭连接
+     * @throws OpenAIException 如果请求失败
+     */
+    public EventSource postStream(String endpoint, Object body, EventSourceListener listener) throws OpenAIException {
+        try {
+            String url = buildUrl(endpoint);
+            String jsonBody = objectMapper.writeValueAsString(body);
+            RequestBody requestBody = RequestBody.create(jsonBody, MediaType.parse("application/json"));
+            
+            Request.Builder requestBuilder = new Request.Builder()
+                    .url(url)
+                    .post(requestBody)
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("Accept", "text/event-stream")
+                    .addHeader("Cache-Control", "no-cache");
+            
+            // 根据配置类型添加不同的认证头
+            if (config.isAzure()) {
+                // Azure OpenAI使用api-key头
+                requestBuilder.addHeader("api-key", config.getApiKey());
+            } else {
+                // 标准OpenAI使用Bearer认证
+                requestBuilder.addHeader("Authorization", "Bearer " + config.getApiKey());
+                
+                // 如果提供了组织ID，添加相应的头部
+                if (config.getOrganization() != null && !config.getOrganization().isEmpty()) {
+                    requestBuilder.addHeader("OpenAI-Organization", config.getOrganization());
+                }
+            }
+            
+            Request request = requestBuilder.build();
+            
+            // 创建EventSource
+            EventSource.Factory factory = EventSources.createFactory(client);
+            return factory.newEventSource(request, listener);
+            
+        } catch (JsonProcessingException e) {
+            throw new OpenAIException("无法序列化请求体", e);
+        }
     }
 }

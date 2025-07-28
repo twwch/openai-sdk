@@ -1,10 +1,12 @@
 package io.github.twwch.openai.sdk.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * OpenAI模型信息
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ModelInfo {
     private String id;
     private String object;

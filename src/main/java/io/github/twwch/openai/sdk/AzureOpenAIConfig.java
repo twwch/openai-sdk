@@ -15,7 +15,7 @@ public class AzureOpenAIConfig extends OpenAIConfig {
      * @param deploymentId 部署ID
      */
     public AzureOpenAIConfig(String apiKey, String resourceName, String deploymentId) {
-        this(apiKey, resourceName, deploymentId, "2023-05-15");
+        this(apiKey, resourceName, deploymentId, "2025-04-01-preview");
     }
 
     /**

@@ -2,6 +2,7 @@ package io.github.twwch.openai.sdk;
 
 import io.github.twwch.openai.sdk.exception.OpenAIException;
 import io.github.twwch.openai.sdk.model.ModelInfo;
+import io.github.twwch.openai.sdk.model.chat.ChatCompletionChunk;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
 import io.github.twwch.openai.sdk.model.chat.ChatMessage;
@@ -10,6 +11,8 @@ import io.github.twwch.openai.sdk.service.OpenAIService;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.function.Consumer;
 
 /**
  * OpenAI客户端
@@ -169,5 +172,82 @@ public class OpenAI {
     public String chat(String model, String systemPrompt, String userPrompt) throws OpenAIException {
         ChatCompletionResponse response = createChatCompletion(model, systemPrompt, userPrompt);
         return response.getContent();
+    }
+
+    /**
+     * 创建聊天完成（流式）
+     * @param request 聊天完成请求
+     * @param onChunk 处理每个数据块的回调
+     * @param onComplete 完成时的回调
+     * @param onError 错误时的回调
+     * @throws OpenAIException 如果请求失败
+     */
+    public void createChatCompletionStream(ChatCompletionRequest request,
+                                          Consumer<ChatCompletionChunk> onChunk,
+                                          Runnable onComplete,
+                                          Consumer<Throwable> onError) throws OpenAIException {
+        service.createChatCompletionStream(request, onChunk, onComplete, onError);
+    }
+
+    /**
+     * 创建聊天完成（流式简化版）
+     * @param model 模型ID
+     * @param messages 消息列表
+     * @param onChunk 处理每个数据块的回调
+     * @throws OpenAIException 如果请求失败
+     */
+    public void createChatCompletionStream(String model, List<ChatMessage> messages,
+                                          Consumer<String> onChunk) throws OpenAIException {
+        CountDownLatch latch = new CountDownLatch(1);
+        ChatCompletionRequest request = new ChatCompletionRequest(model, messages);
+        createChatCompletionStream(request, 
+            chunk -> {
+                String content = chunk.getContent();
+                if (content != null) {
+                    onChunk.accept(content);
+                }
+            },
+            () -> latch.countDown(),
+            e -> {
+                latch.countDown();
+                throw new RuntimeException("流式请求失败", e);
+            }
+        );
+        
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new OpenAIException("流式请求被中断", e);
+        }
+    }
+
+    /**
+     * 流式聊天（最简化版）
+     * @param model 模型ID
+     * @param prompt 用户提示
+     * @param onChunk 处理每个数据块的回调
+     * @throws OpenAIException 如果请求失败
+     */
+    public void chatStream(String model, String prompt, Consumer<String> onChunk) throws OpenAIException {
+        List<ChatMessage> messages = new ArrayList<>();
+        messages.add(ChatMessage.user(prompt));
+        createChatCompletionStream(model, messages, onChunk);
+    }
+
+    /**
+     * 流式聊天（带系统提示）
+     * @param model 模型ID
+     * @param systemPrompt 系统提示
+     * @param userPrompt 用户提示
+     * @param onChunk 处理每个数据块的回调
+     * @throws OpenAIException 如果请求失败
+     */
+    public void chatStream(String model, String systemPrompt, String userPrompt,
+                          Consumer<String> onChunk) throws OpenAIException {
+        List<ChatMessage> messages = new ArrayList<>();
+        messages.add(ChatMessage.system(systemPrompt));
+        messages.add(ChatMessage.user(userPrompt));
+        createChatCompletionStream(model, messages, onChunk);
     }
 }

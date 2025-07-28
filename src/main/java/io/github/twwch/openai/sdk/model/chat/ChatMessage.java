@@ -1,5 +1,6 @@
 package io.github.twwch.openai.sdk.model.chat;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -9,6 +10,7 @@ import java.util.Map;
  * 聊天消息
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ChatMessage {
     private String role;
     private String content;

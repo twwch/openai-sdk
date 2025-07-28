@@ -1,22 +1,20 @@
 package io.github.twwch.openai.sdk.model.chat;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
 
 /**
- * 聊天完成响应
+ * 聊天完成流式响应块
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class ChatCompletionResponse {
+public class ChatCompletionChunk {
     private String id;
     private String object;
     private long created;
     private String model;
     private List<Choice> choices;
-    private Usage usage;
 
     public String getId() {
         return id;
@@ -58,32 +56,13 @@ public class ChatCompletionResponse {
         this.choices = choices;
     }
 
-    public Usage getUsage() {
-        return usage;
-    }
-
-    public void setUsage(Usage usage) {
-        this.usage = usage;
-    }
-
     /**
-     * 获取第一个选择的消息内容
-     * @return 消息内容
+     * 获取第一个选择的内容增量
+     * @return 内容增量
      */
     public String getContent() {
-        if (choices != null && !choices.isEmpty() && choices.get(0).getMessage() != null) {
-            return choices.get(0).getMessage().getContent();
-        }
-        return null;
-    }
-
-    /**
-     * 获取第一个选择的消息
-     * @return 消息
-     */
-    public ChatMessage getMessage() {
-        if (choices != null && !choices.isEmpty()) {
-            return choices.get(0).getMessage();
+        if (choices != null && !choices.isEmpty() && choices.get(0).getDelta() != null) {
+            return choices.get(0).getDelta().getContent();
         }
         return null;
     }
@@ -94,7 +73,7 @@ public class ChatCompletionResponse {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Choice {
         private int index;
-        private ChatMessage message;
+        private Delta delta;
         
         @JsonProperty("finish_reason")
         private String finishReason;
@@ -109,12 +88,12 @@ public class ChatCompletionResponse {
             this.index = index;
         }
 
-        public ChatMessage getMessage() {
-            return message;
+        public Delta getDelta() {
+            return delta;
         }
 
-        public void setMessage(ChatMessage message) {
-            this.message = message;
+        public void setDelta(Delta delta) {
+            this.delta = delta;
         }
 
         public String getFinishReason() {
@@ -135,41 +114,49 @@ public class ChatCompletionResponse {
     }
 
     /**
-     * 使用情况
+     * 增量
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Usage {
-        @JsonProperty("prompt_tokens")
-        private int promptTokens;
+    public static class Delta {
+        private String role;
+        private String content;
         
-        @JsonProperty("completion_tokens")
-        private int completionTokens;
+        @JsonProperty("tool_calls")
+        private List<ChatMessage.ToolCall> toolCalls;
         
-        @JsonProperty("total_tokens")
-        private int totalTokens;
+        @JsonProperty("function_call")
+        private ChatMessage.FunctionCall functionCall;
 
-        public int getPromptTokens() {
-            return promptTokens;
+        public String getRole() {
+            return role;
         }
 
-        public void setPromptTokens(int promptTokens) {
-            this.promptTokens = promptTokens;
+        public void setRole(String role) {
+            this.role = role;
         }
 
-        public int getCompletionTokens() {
-            return completionTokens;
+        public String getContent() {
+            return content;
         }
 
-        public void setCompletionTokens(int completionTokens) {
-            this.completionTokens = completionTokens;
+        public void setContent(String content) {
+            this.content = content;
         }
 
-        public int getTotalTokens() {
-            return totalTokens;
+        public List<ChatMessage.ToolCall> getToolCalls() {
+            return toolCalls;
         }
 
-        public void setTotalTokens(int totalTokens) {
-            this.totalTokens = totalTokens;
+        public void setToolCalls(List<ChatMessage.ToolCall> toolCalls) {
+            this.toolCalls = toolCalls;
+        }
+
+        public ChatMessage.FunctionCall getFunctionCall() {
+            return functionCall;
+        }
+
+        public void setFunctionCall(ChatMessage.FunctionCall functionCall) {
+            this.functionCall = functionCall;
         }
     }
 }

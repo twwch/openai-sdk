@@ -11,6 +11,7 @@ This SDK provides a simple and intuitive way to integrate OpenAI services into y
 - Easy-to-use API client for OpenAI services
 - Support for both OpenAI and Azure OpenAI endpoints
 - Chat completion API support
+- Streaming responses support
 - Function calling and tool use support
 - Configurable HTTP client
 - Comprehensive error handling
@@ -149,6 +150,51 @@ public class FunctionCallingExample {
     private static String getWeather(String arguments) {
         // Parse arguments and return weather data
         return "{\"temperature\": \"22°C\", \"description\": \"Sunny\"}";
+    }
+}
+```
+
+### Streaming Responses
+
+```java
+import io.github.twwch.openai.sdk.OpenAI;
+import io.github.twwch.openai.sdk.model.chat.*;
+
+public class StreamExample {
+    public static void main(String[] args) {
+        OpenAI openai = new OpenAI("your-api-key");
+        
+        // Simple streaming
+        openai.chatStream("gpt-3.5-turbo", "Tell me a story", 
+            content -> System.out.print(content)
+        );
+        
+        // Streaming with system prompt
+        openai.chatStream("gpt-3.5-turbo", 
+            "You are a helpful assistant", 
+            "What is the weather today?",
+            content -> System.out.print(content)
+        );
+        
+        // Advanced streaming with full control
+        ChatCompletionRequest request = new ChatCompletionRequest();
+        request.setModel("gpt-3.5-turbo");
+        request.setMessages(Arrays.asList(
+            ChatMessage.user("Write a haiku")
+        ));
+        
+        openai.createChatCompletionStream(
+            request,
+            chunk -> {
+                // Handle each chunk
+                String content = chunk.getContent();
+                if (content != null) {
+                    System.out.print(content);
+                }
+            },
+            () -> System.out.println("\n[Stream completed]"),
+            error -> System.err.println("Error: " + error.getMessage())
+        );
     }
 }
 ```
@@ -310,6 +356,21 @@ request.setTools(Arrays.asList(tool));
 if (response.getMessage().getToolCalls() != null) {
     // Process tool calls
 }
+```
+
+### Streaming
+
+```java
+// Simple streaming
+openai.chatStream("gpt-3.5-turbo", "Your prompt", 
+    content -> System.out.print(content));
+
+// Advanced streaming
+openai.createChatCompletionStream(request,
+    chunk -> { /* handle chunk */ },
+    () -> { /* on complete */ },
+    error -> { /* handle error */ }
+);
 ```
 
 ## Building from Source
