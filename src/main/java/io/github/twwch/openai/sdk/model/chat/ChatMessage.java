@@ -148,10 +148,12 @@ public class ChatMessage {
     /**
      * 工具调用
      */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ToolCall {
         private String id;
         private String type;
         private Function function;
+        private Integer index; // 流式响应中的索引
 
         public String getId() {
             return id;
@@ -176,10 +178,19 @@ public class ChatMessage {
         public void setFunction(Function function) {
             this.function = function;
         }
+        
+        public Integer getIndex() {
+            return index;
+        }
+        
+        public void setIndex(Integer index) {
+            this.index = index;
+        }
 
         /**
          * 函数定义
          */
+        @JsonIgnoreProperties(ignoreUnknown = true)
         public static class Function {
             private String name;
             private String arguments;
