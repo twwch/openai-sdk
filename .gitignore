@@ -76,10 +76,24 @@ ehthumbs.db
 .env.local
 .env.*.local
 
+# Sensitive configuration files
 settings-central.xml
 settings-ossrh.xml
 export-gpg-key.sh
+setup-github-secrets.sh
+verify-gpg-export.sh
 GITHUB_RELEASE_SETUP.md
+GITHUB_SECRETS_SETUP.md
 gpg-private-key.asc
-github-secrets-guide.md
+gpg-private-key-armored.asc
 gpg-private-key-base64.txt
+gpg-private-key-base64-only.txt
+github-secrets-guide.md
+github-secrets.txt
+PAT_SETUP.md
+check-repo-settings.md
+
+# GPG related files
+*.asc
+*-key.txt
+*-key-base64.txt
