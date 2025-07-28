@@ -39,9 +39,9 @@ Add the following dependency to your `pom.xml`:
 ### Basic Chat Example
 
 ```java
-import com.openai.sdk.OpenAI;
-import com.openai.sdk.OpenAIConfig;
-import com.openai.sdk.model.chat.*;
+import io.github.twwch.openai.sdk.OpenAI;
+import io.github.twwch.openai.sdk.OpenAIConfig;
+import io.github.twwch.openai.sdk.model.chat.*;
 
 public class Example {
     public static void main(String[] args) {
@@ -64,7 +64,7 @@ public class Example {
 ### Azure OpenAI Example
 
 ```java
-import com.openai.sdk.OpenAI;
+import io.github.twwch.openai.sdk.OpenAI;
 
 public class AzureExample {
     public static void main(String[] args) {
@@ -85,8 +85,8 @@ public class AzureExample {
 ### Function Calling (Tool Use)
 
 ```java
-import com.openai.sdk.OpenAI;
-import com.openai.sdk.model.chat.*;
+import io.github.twwch.openai.sdk.OpenAI;
+import io.github.twwch.openai.sdk.model.chat.*;
 import java.util.*;
 
 public class FunctionCallingExample {
@@ -156,8 +156,8 @@ public class FunctionCallingExample {
 ### Using Tools (Recommended for newer models)
 
 ```java
-import com.openai.sdk.OpenAI;
-import com.openai.sdk.model.chat.*;
+import io.github.twwch.openai.sdk.OpenAI;
+import io.github.twwch.openai.sdk.model.chat.*;
 import java.util.*;
 
 public class ToolUseExample {
@@ -224,7 +224,7 @@ openai-sdk/
 ├── src/
 │   ├── main/
 │   │   └── java/
-│   │       └── com/openai/sdk/
+│   │       └── io/github/twwch/openai/sdk/
 │   │           ├── OpenAI.java              # Main client class
 │   │           ├── OpenAIConfig.java        # Configuration for OpenAI
 │   │           ├── AzureOpenAIConfig.java   # Configuration for Azure OpenAI
@@ -235,7 +235,7 @@ openai-sdk/
 │   │           └── example/                 # Example usage
 │   └── test/
 │       └── java/
-│           └── com/openai/sdk/
+│           └── io/github/twwch/openai/sdk/
 │               └── OpenAITest.java          # Unit tests
 ├── pom.xml
 ├── .gitignore

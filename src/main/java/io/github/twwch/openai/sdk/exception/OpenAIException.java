@@ -1,4 +1,4 @@
-package com.openai.sdk.exception;
+package io.github.twwch.openai.sdk.exception;
 
 /**
  * OpenAI API异常类

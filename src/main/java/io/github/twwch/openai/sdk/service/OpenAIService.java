@@ -1,16 +1,16 @@
-package com.openai.sdk.service;
+package io.github.twwch.openai.sdk.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.openai.sdk.AzureOpenAIConfig;
-import com.openai.sdk.OpenAIConfig;
-import com.openai.sdk.exception.OpenAIException;
-import com.openai.sdk.http.OpenAIHttpClient;
-import com.openai.sdk.model.ModelInfo;
-import com.openai.sdk.model.chat.ChatCompletionRequest;
-import com.openai.sdk.model.chat.ChatCompletionResponse;
+import io.github.twwch.openai.sdk.AzureOpenAIConfig;
+import io.github.twwch.openai.sdk.OpenAIConfig;
+import io.github.twwch.openai.sdk.exception.OpenAIException;
+import io.github.twwch.openai.sdk.http.OpenAIHttpClient;
+import io.github.twwch.openai.sdk.model.ModelInfo;
+import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
+import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
 
 import java.util.ArrayList;
 import java.util.HashMap;

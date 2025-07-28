@@ -1,4 +1,4 @@
-package com.openai.sdk.model.chat;
+package io.github.twwch.openai.sdk.model.chat;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 

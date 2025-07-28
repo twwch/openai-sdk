@@ -1,9 +1,9 @@
-package com.openai.sdk.example;
+package io.github.twwch.openai.sdk.example;
 
-import com.openai.sdk.OpenAI;
-import com.openai.sdk.model.ModelInfo;
-import com.openai.sdk.model.chat.ChatCompletionResponse;
-import com.openai.sdk.model.chat.ChatMessage;
+import io.github.twwch.openai.sdk.OpenAI;
+import io.github.twwch.openai.sdk.model.ModelInfo;
+import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
+import io.github.twwch.openai.sdk.model.chat.ChatMessage;
 
 import java.util.ArrayList;
 import java.util.List;

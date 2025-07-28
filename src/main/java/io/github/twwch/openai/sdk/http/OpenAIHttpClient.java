@@ -1,11 +1,11 @@
-package com.openai.sdk.http;
+package io.github.twwch.openai.sdk.http;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.openai.sdk.AzureOpenAIConfig;
-import com.openai.sdk.OpenAIConfig;
-import com.openai.sdk.exception.OpenAIException;
+import io.github.twwch.openai.sdk.AzureOpenAIConfig;
+import io.github.twwch.openai.sdk.OpenAIConfig;
+import io.github.twwch.openai.sdk.exception.OpenAIException;
 import okhttp3.*;
 
 import java.io.IOException;

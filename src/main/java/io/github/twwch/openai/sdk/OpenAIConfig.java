@@ -1,4 +1,4 @@
-package com.openai.sdk;
+package io.github.twwch.openai.sdk;
 
 /**
  * OpenAI API配置类

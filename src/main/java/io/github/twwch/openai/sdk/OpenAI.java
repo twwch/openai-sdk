@@ -1,11 +1,11 @@
-package com.openai.sdk;
+package io.github.twwch.openai.sdk;
 
-import com.openai.sdk.exception.OpenAIException;
-import com.openai.sdk.model.ModelInfo;
-import com.openai.sdk.model.chat.ChatCompletionRequest;
-import com.openai.sdk.model.chat.ChatCompletionResponse;
-import com.openai.sdk.model.chat.ChatMessage;
-import com.openai.sdk.service.OpenAIService;
+import io.github.twwch.openai.sdk.exception.OpenAIException;
+import io.github.twwch.openai.sdk.model.ModelInfo;
+import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
+import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
+import io.github.twwch.openai.sdk.model.chat.ChatMessage;
+import io.github.twwch.openai.sdk.service.OpenAIService;
 
 import java.util.ArrayList;
 import java.util.Arrays;

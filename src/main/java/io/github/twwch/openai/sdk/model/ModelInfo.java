@@ -1,4 +1,4 @@
-package com.openai.sdk.model;
+package io.github.twwch.openai.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 

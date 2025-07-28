@@ -1,7 +1,7 @@
-package com.openai.sdk;
+package io.github.twwch.openai.sdk;
 
-import com.openai.sdk.model.chat.ChatCompletionResponse;
-import com.openai.sdk.model.chat.ChatMessage;
+import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
+import io.github.twwch.openai.sdk.model.chat.ChatMessage;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
