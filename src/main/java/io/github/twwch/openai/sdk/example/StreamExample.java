@@ -16,10 +16,10 @@ public class StreamExample {
 //        String baseUrl = "";
 //        String model = "";
         // 创建OpenAI客户端
-        String apiKey = "";
+        String apiKey = "cbaff90b4ad4416fbbfdbf6a794886a9";
 
         // 替换为你的Azure OpenAI资源名称
-        String resourceName = "";
+        String resourceName = "iweaver-ai2";
 
         // 替换为你的Azure OpenAI部署ID
         String deploymentId = "gpt-4.1";

@@ -138,6 +138,33 @@ public class OpenAIService {
             private volatile boolean isDone = false;
             
             @Override
+            public void onOpen(EventSource eventSource, okhttp3.Response response) {
+                // 检查响应状态
+                if (!response.isSuccessful()) {
+                    isDone = true;
+                    eventSource.cancel();
+                    if (onError != null) {
+                        String errorMessage = "流式请求失败 (状态码: " + response.code() + ")";
+                        if (response.message() != null && !response.message().isEmpty()) {
+                            errorMessage += " - " + response.message();
+                        }
+                        // 尝试读取响应体获取更多错误信息
+                        try {
+                            if (response.body() != null) {
+                                String body = response.body().string();
+                                if (!body.isEmpty()) {
+                                    errorMessage += " - " + body;
+                                }
+                            }
+                        } catch (IOException e) {
+                            // 忽略读取错误
+                        }
+                        onError.accept(new OpenAIException(errorMessage));
+                    }
+                }
+            }
+            
+            @Override
             public void onEvent(EventSource eventSource, String id, String type, String data) {
                 if ("[DONE]".equals(data)) {
                     isDone = true;
@@ -165,10 +192,33 @@ public class OpenAIService {
             @Override
             public void onFailure(EventSource eventSource, Throwable t, okhttp3.Response response) {
                 // 如果是因为我们主动取消导致的失败，忽略错误
-                if (!isDone && !(t instanceof java.net.SocketException && t.getMessage() != null && 
-                    (t.getMessage().contains("Socket closed") || t.getMessage().contains("stream was reset: CANCEL")))) {
-                    if (onError != null) {
-                        onError.accept(new OpenAIException("流式请求失败", t));
+                if (!isDone) {
+                    // 判断是否是可忽略的错误
+                    boolean isIgnorableError = false;
+                    if (t instanceof java.net.SocketException || t instanceof java.io.IOException) {
+                        String message = t.getMessage();
+                        if (message != null && (
+                            message.contains("Socket closed") || 
+                            message.contains("stream was reset: CANCEL") ||
+                            message.contains("canceled") ||
+                            message.contains("Stream closed"))) {
+                            isIgnorableError = true;
+                        }
+                    }
+                    
+                    if (!isIgnorableError && onError != null) {
+                        // 构建更详细的错误信息
+                        String errorMessage = "流式请求失败";
+                        if (response != null) {
+                            errorMessage += " (状态码: " + response.code() + ")";
+                            if (response.message() != null && !response.message().isEmpty()) {
+                                errorMessage += " - " + response.message();
+                            }
+                        }
+                        if (t != null && t.getMessage() != null) {
+                            errorMessage += ": " + t.getMessage();
+                        }
+                        onError.accept(new OpenAIException(errorMessage, t));
                     }
                 }
                 eventSource.cancel(); // 确保连接被关闭
