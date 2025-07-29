@@ -16,6 +16,10 @@ public class ChatMessage {
     private String content;
     private String name;
     
+    @JsonProperty("tool_call_id")
+    private String toolCallId;
+
+    
     @JsonProperty("function_call")
     private FunctionCall functionCall;
     
@@ -52,6 +56,14 @@ public class ChatMessage {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getToolCallId() {
+        return toolCallId;
+    }
+
+    public void setToolCallId(String toolCallId) {
+        this.toolCallId = toolCallId;
     }
 
     public FunctionCall getFunctionCall() {
@@ -111,13 +123,27 @@ public class ChatMessage {
 
     /**
      * 创建工具消息
-     * @param name 工具名称
+     * @param toolCallId 工具调用ID
      * @param content 工具返回内容
      * @return 工具消息
      */
-    public static ChatMessage tool(String name, String content) {
+    public static ChatMessage tool(String toolCallId, String content) {
+        ChatMessage message = new ChatMessage("tool", content);
+        message.setToolCallId(toolCallId);
+        return message;
+    }
+    
+    /**
+     * 创建工具消息（带名称，用于兼容旧版本）
+     * @param name 工具名称
+     * @param toolCallId 工具调用ID
+     * @param content 工具返回内容
+     * @return 工具消息
+     */
+    public static ChatMessage tool(String name, String toolCallId, String content) {
         ChatMessage message = new ChatMessage("tool", content);
         message.setName(name);
+        message.setToolCallId(toolCallId);
         return message;
     }
 
