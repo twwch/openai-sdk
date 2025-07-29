@@ -48,7 +48,7 @@ public class OpenAIHttpClient {
         return execute(new Request.Builder()
                 .url(url)
                 .get()
-                .build());
+                .build(), null);
     }
 
     /**
@@ -67,7 +67,7 @@ public class OpenAIHttpClient {
             return execute(new Request.Builder()
                     .url(url)
                     .post(requestBody)
-                    .build());
+                    .build(), jsonBody);
         } catch (JsonProcessingException e) {
             throw new OpenAIException("无法序列化请求体", e);
         }
@@ -85,7 +85,7 @@ public class OpenAIHttpClient {
         return execute(new Request.Builder()
                 .url(url)
                 .delete()
-                .build());
+                .build(), null);
     }
     
     /**
@@ -123,10 +123,11 @@ public class OpenAIHttpClient {
      * 执行HTTP请求
      *
      * @param request HTTP请求
+     * @param requestBody 请求体内容（用于错误日志）
      * @return 响应体
      * @throws OpenAIException 如果请求失败
      */
-    private String execute(Request request) throws OpenAIException {
+    private String execute(Request request, String requestBody) throws OpenAIException {
         // 构建带有认证头的请求
         Request.Builder requestBuilder = request.newBuilder()
                 .addHeader("Content-Type", "application/json");
@@ -151,7 +152,7 @@ public class OpenAIHttpClient {
             String responseBody = response.body() != null ? response.body().string() : "";
             
             if (!response.isSuccessful()) {
-                handleErrorResponse(response.code(), responseBody);
+                handleErrorResponse(response.code(), responseBody, request.url().toString(), requestBody);
             }
             
             return responseBody;
@@ -165,12 +166,24 @@ public class OpenAIHttpClient {
      *
      * @param statusCode  HTTP状态码
      * @param responseBody 响应体
+     * @param url 请求URL
+     * @param requestBody 请求体
      * @throws OpenAIException 包含错误详情的异常
      */
-    private void handleErrorResponse(int statusCode, String responseBody) throws OpenAIException {
+    private void handleErrorResponse(int statusCode, String responseBody, String url, String requestBody) throws OpenAIException {
         String message = "请求失败，状态码: " + statusCode;
         String errorType = null;
         String errorCode = null;
+
+        // 打印详细的错误信息到控制台
+        System.err.println("=== OpenAI API 错误详情 ===");
+        System.err.println("状态码: " + statusCode);
+        System.err.println("请求URL: " + url);
+        if (requestBody != null) {
+            System.err.println("请求参数: " + requestBody);
+        }
+        System.err.println("错误响应: " + responseBody);
+        System.err.println("========================");
 
         try {
             JsonNode errorJson = objectMapper.readTree(responseBody);
@@ -188,6 +201,11 @@ public class OpenAIHttpClient {
             }
         } catch (Exception e) {
             // 如果解析失败，使用默认错误消息
+        }
+
+        // 如果是400错误且涉及tools，添加特殊提示
+        if (statusCode == 400 && requestBody != null && requestBody.contains("\"tools\"")) {
+            message += " (可能是tools参数格式错误，请检查控制台输出的请求参数)";
         }
 
         throw new OpenAIException(message, statusCode, errorType, errorCode);

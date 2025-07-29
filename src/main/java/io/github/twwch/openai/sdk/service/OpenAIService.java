@@ -148,17 +148,32 @@ public class OpenAIService {
                         if (response.message() != null && !response.message().isEmpty()) {
                             errorMessage += " - " + response.message();
                         }
+                        
+                        // 打印请求详情以便调试
+                        System.err.println("=== OpenAI API 流式请求错误 ===");
+                        System.err.println("状态码: " + response.code());
+                        System.err.println("请求URL: " + response.request().url());
+                        try {
+                            String requestJson = objectMapper.writeValueAsString(request);
+                            System.err.println("请求参数: " + requestJson);
+                        } catch (JsonProcessingException je) {
+                            System.err.println("请求参数: [无法序列化]");
+                        }
+                        
                         // 尝试读取响应体获取更多错误信息
                         try {
                             if (response.body() != null) {
                                 String body = response.body().string();
                                 if (!body.isEmpty()) {
+                                    System.err.println("错误响应: " + body);
                                     errorMessage += " - " + body;
                                 }
                             }
                         } catch (IOException e) {
                             // 忽略读取错误
                         }
+                        System.err.println("========================");
+                        
                         onError.accept(new OpenAIException(errorMessage));
                     }
                 }
@@ -214,6 +229,19 @@ public class OpenAIService {
                             if (response.message() != null && !response.message().isEmpty()) {
                                 errorMessage += " - " + response.message();
                             }
+                            
+                            // 打印请求详情以便调试
+                            System.err.println("=== OpenAI API 流式请求失败 ===");
+                            System.err.println("状态码: " + response.code());
+                            System.err.println("请求URL: " + response.request().url());
+                            try {
+                                String requestJson = objectMapper.writeValueAsString(request);
+                                System.err.println("请求参数: " + requestJson);
+                            } catch (JsonProcessingException je) {
+                                System.err.println("请求参数: [无法序列化]");
+                            }
+                            System.err.println("错误: " + t.getMessage());
+                            System.err.println("========================");
                         }
                         if (t != null && t.getMessage() != null) {
                             errorMessage += ": " + t.getMessage();
