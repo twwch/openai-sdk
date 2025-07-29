@@ -31,7 +31,7 @@ Add the following dependency to your `pom.xml`:
 <dependency>
     <groupId>io.github.twwch</groupId>
     <artifactId>openai-sdk</artifactId>
-    <version>1.1.2</version>
+    <version>1.1.3</version>
 </dependency>
 ```
 

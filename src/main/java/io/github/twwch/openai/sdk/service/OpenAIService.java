@@ -240,7 +240,9 @@ public class OpenAIService {
                             } catch (JsonProcessingException je) {
                                 System.err.println("请求参数: [无法序列化]");
                             }
-                            System.err.println("错误: " + t.getMessage());
+                            if (t != null) {
+                                System.err.println("错误: " + t.getMessage());
+                            }
                             System.err.println("========================");
                         }
                         if (t != null && t.getMessage() != null) {
