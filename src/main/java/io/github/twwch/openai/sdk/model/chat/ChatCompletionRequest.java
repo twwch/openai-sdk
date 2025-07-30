@@ -52,6 +52,9 @@ public class ChatCompletionRequest {
     
     @JsonProperty("response_format")
     private ResponseFormat responseFormat;
+    
+    @JsonProperty("stream_options")
+    private StreamOptions streamOptions;
 
     public ChatCompletionRequest() {
         this.messages = new ArrayList<>();
@@ -198,6 +201,14 @@ public class ChatCompletionRequest {
         this.responseFormat = responseFormat;
     }
 
+    public StreamOptions getStreamOptions() {
+        return streamOptions;
+    }
+
+    public void setStreamOptions(StreamOptions streamOptions) {
+        this.streamOptions = streamOptions;
+    }
+
     /**
      * 函数定义
      */
@@ -277,6 +288,30 @@ public class ChatCompletionRequest {
 
         public void setType(String type) {
             this.type = type;
+        }
+    }
+
+    /**
+     * 流式选项
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class StreamOptions {
+        @JsonProperty("include_usage")
+        private Boolean includeUsage;
+
+        public StreamOptions() {
+        }
+
+        public StreamOptions(boolean includeUsage) {
+            this.includeUsage = includeUsage;
+        }
+
+        public Boolean getIncludeUsage() {
+            return includeUsage;
+        }
+
+        public void setIncludeUsage(Boolean includeUsage) {
+            this.includeUsage = includeUsage;
         }
     }
 }

@@ -16,7 +16,7 @@ public class StreamExample {
 //        String baseUrl = "";
 //        String model = "";
         // 创建OpenAI客户端
-        String apiKey = "cbaff90b4ad4416fbbfdbf6a794886a9";
+        String apiKey = "";
 
         // 替换为你的Azure OpenAI资源名称
         String resourceName = "iweaver-ai2";
@@ -93,7 +93,7 @@ public class StreamExample {
             request.setModel(model);
             request.setMessages(Arrays.asList(
                 ChatMessage.system("你是一个有帮助的助手"),
-                ChatMessage.user("解释一下什么是人工智能，用3句话")
+                ChatMessage.user("你好")
             ));
             request.setTemperature(0.7);
             request.setMaxTokens(200);
@@ -117,6 +117,14 @@ public class StreamExample {
                         if (finishReason != null) {
                             System.out.println("\n[完成原因: " + finishReason + "]");
                         }
+                    }
+                    
+                    // 检查是否有 usage 信息
+                    if (chunk.getUsage() != null) {
+                        System.out.println("\n[Token使用统计:]");
+                        System.out.println("  - 输入Tokens: " + chunk.getUsage().getPromptTokens());
+                        System.out.println("  - 输出Tokens: " + chunk.getUsage().getCompletionTokens());
+                        System.out.println("  - 总计Tokens: " + chunk.getUsage().getTotalTokens());
                     }
                 },
                 // 完成时的回调

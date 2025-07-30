@@ -15,6 +15,7 @@ public class ChatCompletionChunk {
     private long created;
     private String model;
     private List<Choice> choices;
+    private ChatCompletionResponse.Usage usage;
 
     public String getId() {
         return id;
@@ -54,6 +55,14 @@ public class ChatCompletionChunk {
 
     public void setChoices(List<Choice> choices) {
         this.choices = choices;
+    }
+
+    public ChatCompletionResponse.Usage getUsage() {
+        return usage;
+    }
+
+    public void setUsage(ChatCompletionResponse.Usage usage) {
+        this.usage = usage;
     }
 
     /**

@@ -199,6 +199,83 @@ public class StreamExample {
 }
 ```
 
+### Streaming with Usage Tracking
+
+The SDK automatically includes token usage information in streaming responses:
+
+```java
+import io.github.twwch.openai.sdk.OpenAI;
+import io.github.twwch.openai.sdk.model.chat.*;
+import java.util.concurrent.CountDownLatch;
+
+public class StreamWithUsageExample {
+    public static void main(String[] args) throws InterruptedException {
+        OpenAI openai = new OpenAI("your-api-key");
+        
+        // Create a latch to wait for completion
+        CountDownLatch latch = new CountDownLatch(1);
+        StringBuilder fullResponse = new StringBuilder();
+        
+        // Create request
+        ChatCompletionRequest request = new ChatCompletionRequest();
+        request.setModel("gpt-3.5-turbo");
+        request.setMessages(Arrays.asList(
+            ChatMessage.system("You are a helpful assistant"),
+            ChatMessage.user("Tell me about the benefits of exercise")
+        ));
+        request.setMaxTokens(150);
+        
+        System.out.println("AI Response:");
+        System.out.println("-".repeat(50));
+        
+        // Stream with usage tracking
+        openai.createChatCompletionStream(
+            request,
+            chunk -> {
+                // Handle content chunks
+                String content = chunk.getContent();
+                if (content != null) {
+                    System.out.print(content);
+                    fullResponse.append(content);
+                }
+                
+                // Handle finish reason
+                if (chunk.getChoices() != null && !chunk.getChoices().isEmpty()) {
+                    String finishReason = chunk.getChoices().get(0).getFinishReason();
+                    if (finishReason != null) {
+                        System.out.println("\n\n[Finish reason: " + finishReason + "]");
+                    }
+                }
+                
+                // Handle usage data (automatically included)
+                if (chunk.getUsage() != null) {
+                    System.out.println("\n" + "-".repeat(50));
+                    System.out.println("Token Usage Statistics:");
+                    System.out.println("  • Input tokens: " + chunk.getUsage().getPromptTokens());
+                    System.out.println("  • Output tokens: " + chunk.getUsage().getCompletionTokens());
+                    System.out.println("  • Total tokens: " + chunk.getUsage().getTotalTokens());
+                }
+            },
+            () -> {
+                System.out.println("\n[Stream completed successfully]");
+                latch.countDown();
+            },
+            error -> {
+                System.err.println("\n[Error: " + error.getMessage() + "]");
+                latch.countDown();
+            }
+        );
+        
+        // Wait for completion
+        latch.await();
+        
+        System.out.println("\nTotal response length: " + fullResponse.length() + " characters");
+    }
+}
+```
+
+**Note**: The SDK automatically adds `stream_options: { include_usage: true }` to all streaming requests, so you'll receive token usage information at the end of each stream without any additional configuration.
+
 ### Using Tools (Recommended for newer models)
 
 ```java

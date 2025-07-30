@@ -203,7 +203,7 @@ public class OpenAI {
         createChatCompletionStream(request, 
             chunk -> {
                 String content = chunk.getContent();
-                if (content != null) {
+                if (content != null && !content.isEmpty()) {
                     onChunk.accept(content);
                 }
             },
