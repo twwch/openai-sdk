@@ -155,7 +155,14 @@ public class ChatCompletionRequest {
         this.model = model;
         this.messages = messages;
         // 设置默认值
-        this.temperature = 1.0;
+        if (model != null && model.toLowerCase().contains("o3")) {
+            // o3 模型不设置这些默认值
+            this.temperature = null;
+            this.maxTokens = null;
+            this.parallelToolCalls = null;
+        } else {
+            this.temperature = 1.0;
+        }
         this.topP = 1.0;
         this.n = 1;
         this.presencePenalty = 0.0;
@@ -170,6 +177,13 @@ public class ChatCompletionRequest {
 
     public void setModel(String model) {
         this.model = model;
+        
+        // 如果模型名称包含 "o3"，设置相关参数为 null
+        if (model != null && model.toLowerCase().contains("o3")) {
+            this.temperature = null;
+            this.maxTokens = null;
+            this.parallelToolCalls = null;
+        }
     }
 
     public List<ChatMessage> getMessages() {
@@ -185,6 +199,10 @@ public class ChatCompletionRequest {
     }
 
     public void setMaxTokens(Integer maxTokens) {
+        // 如果当前模型包含 "o3"，忽略此设置
+        if (this.model != null && this.model.toLowerCase().contains("o3")) {
+            return;
+        }
         this.maxTokens = maxTokens;
     }
 
@@ -193,6 +211,10 @@ public class ChatCompletionRequest {
     }
 
     public void setTemperature(Double temperature) {
+        // 如果当前模型包含 "o3"，忽略此设置
+        if (this.model != null && this.model.toLowerCase().contains("o3")) {
+            return;
+        }
         this.temperature = temperature;
     }
 
@@ -282,6 +304,10 @@ public class ChatCompletionRequest {
 
     public void setTools(List<Tool> tools) {
         this.tools = tools;
+        // 如果当前模型包含 "o3"，不设置 parallelToolCalls
+        if (this.model != null && this.model.toLowerCase().contains("o3")) {
+            return;
+        }
         // 当设置 tools 时，如果 parallelToolCalls 未设置，则默认为 true
         if (tools != null && !tools.isEmpty() && this.parallelToolCalls == null) {
             this.parallelToolCalls = true;
@@ -357,6 +383,10 @@ public class ChatCompletionRequest {
     }
 
     public void setParallelToolCalls(Boolean parallelToolCalls) {
+        // 如果当前模型包含 "o3"，忽略此设置
+        if (this.model != null && this.model.toLowerCase().contains("o3")) {
+            return;
+        }
         this.parallelToolCalls = parallelToolCalls;
     }
 

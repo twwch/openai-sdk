@@ -70,6 +70,8 @@ ehthumbs.db
 *.bak
 *.swp
 *~.nib
+azure_o3_example.py
+azure_o3_simple.py
 
 # API Keys and environment files
 .env
