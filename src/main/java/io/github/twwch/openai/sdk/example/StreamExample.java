@@ -90,6 +90,7 @@ public class StreamExample {
             
             // 创建请求
             ChatCompletionRequest request = new ChatCompletionRequest();
+            request.setStreamOptions(new ChatCompletionRequest.StreamOptions(true));
             request.setModel(model);
             request.setMessages(Arrays.asList(
                 ChatMessage.system("你是一个有帮助的助手"),

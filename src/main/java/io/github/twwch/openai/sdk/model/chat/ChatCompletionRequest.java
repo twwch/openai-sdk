@@ -55,14 +55,113 @@ public class ChatCompletionRequest {
     
     @JsonProperty("stream_options")
     private StreamOptions streamOptions;
+    
+    /**
+     * Parameters for audio output. Required when audio output is requested with modalities: ["audio"]
+     */
+    private AudioParams audio;
+    
+    /**
+     * Whether to return log probabilities of the output tokens or not
+     */
+    private Boolean logprobs;
+    
+    /**
+     * An upper bound for the number of tokens that can be generated for a completion
+     */
+    @JsonProperty("max_completion_tokens")
+    private Integer maxCompletionTokens;
+    
+    /**
+     * Set of 16 key-value pairs that can be attached to an object
+     */
+    private Map<String, String> metadata;
+    
+    /**
+     * Output types that you would like the model to generate
+     */
+    private List<String> modalities;
+    
+    /**
+     * Whether to enable parallel function calling during tool use
+     */
+    @JsonProperty("parallel_tool_calls")
+    private Boolean parallelToolCalls;
+    
+    /**
+     * Configuration for a Predicted Output
+     */
+    private Prediction prediction;
+    
+    /**
+     * Used by OpenAI to cache responses for similar requests
+     */
+    @JsonProperty("prompt_cache_key")
+    private String promptCacheKey;
+    
+    /**
+     * Constrains effort on reasoning for reasoning models (o-series models only)
+     */
+    @JsonProperty("reasoning_effort")
+    private String reasoningEffort;
+    
+    /**
+     * A stable identifier used to help detect users of your application
+     */
+    @JsonProperty("safety_identifier")
+    private String safetyIdentifier;
+    
+    /**
+     * This feature is in Beta. If specified, our system will make a best effort to sample deterministically
+     */
+    private Integer seed;
+    
+    /**
+     * Specifies the processing type used for serving the request
+     */
+    @JsonProperty("service_tier")
+    private String serviceTier;
+    
+    /**
+     * Whether or not to store the output of this chat completion request
+     */
+    private Boolean store;
+    
+    /**
+     * An integer between 0 and 20 specifying the number of most likely tokens to return at each token position
+     */
+    @JsonProperty("top_logprobs")
+    private Integer topLogprobs;
+    
+    /**
+     * This tool searches the web for relevant results to use in a response
+     */
+    @JsonProperty("web_search_options")
+    private WebSearchOptions webSearchOptions;
 
     public ChatCompletionRequest() {
         this.messages = new ArrayList<>();
+        // 设置默认值
+        this.temperature = 1.0;
+        this.topP = 1.0;
+        this.n = 1;
+        this.presencePenalty = 0.0;
+        this.frequencyPenalty = 0.0;
+        this.logprobs = false;
+        this.serviceTier = "auto";
     }
 
     public ChatCompletionRequest(String model, List<ChatMessage> messages) {
         this.model = model;
         this.messages = messages;
+        // 设置默认值
+        this.temperature = 1.0;
+        this.topP = 1.0;
+        this.n = 1;
+        this.presencePenalty = 0.0;
+        this.frequencyPenalty = 0.0;
+        this.logprobs = false;
+        this.serviceTier = "auto";
     }
 
     public String getModel() {
@@ -183,6 +282,10 @@ public class ChatCompletionRequest {
 
     public void setTools(List<Tool> tools) {
         this.tools = tools;
+        // 当设置 tools 时，如果 parallelToolCalls 未设置，则默认为 true
+        if (tools != null && !tools.isEmpty() && this.parallelToolCalls == null) {
+            this.parallelToolCalls = true;
+        }
     }
 
     public Object getToolChoice() {
@@ -207,6 +310,126 @@ public class ChatCompletionRequest {
 
     public void setStreamOptions(StreamOptions streamOptions) {
         this.streamOptions = streamOptions;
+    }
+
+    public AudioParams getAudio() {
+        return audio;
+    }
+
+    public void setAudio(AudioParams audio) {
+        this.audio = audio;
+    }
+
+    public Boolean getLogprobs() {
+        return logprobs;
+    }
+
+    public void setLogprobs(Boolean logprobs) {
+        this.logprobs = logprobs;
+    }
+
+    public Integer getMaxCompletionTokens() {
+        return maxCompletionTokens;
+    }
+
+    public void setMaxCompletionTokens(Integer maxCompletionTokens) {
+        this.maxCompletionTokens = maxCompletionTokens;
+    }
+
+    public Map<String, String> getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(Map<String, String> metadata) {
+        this.metadata = metadata;
+    }
+
+    public List<String> getModalities() {
+        return modalities;
+    }
+
+    public void setModalities(List<String> modalities) {
+        this.modalities = modalities;
+    }
+
+    public Boolean getParallelToolCalls() {
+        return parallelToolCalls;
+    }
+
+    public void setParallelToolCalls(Boolean parallelToolCalls) {
+        this.parallelToolCalls = parallelToolCalls;
+    }
+
+    public Prediction getPrediction() {
+        return prediction;
+    }
+
+    public void setPrediction(Prediction prediction) {
+        this.prediction = prediction;
+    }
+
+    public String getPromptCacheKey() {
+        return promptCacheKey;
+    }
+
+    public void setPromptCacheKey(String promptCacheKey) {
+        this.promptCacheKey = promptCacheKey;
+    }
+
+    public String getReasoningEffort() {
+        return reasoningEffort;
+    }
+
+    public void setReasoningEffort(String reasoningEffort) {
+        this.reasoningEffort = reasoningEffort;
+    }
+
+    public String getSafetyIdentifier() {
+        return safetyIdentifier;
+    }
+
+    public void setSafetyIdentifier(String safetyIdentifier) {
+        this.safetyIdentifier = safetyIdentifier;
+    }
+
+    public Integer getSeed() {
+        return seed;
+    }
+
+    public void setSeed(Integer seed) {
+        this.seed = seed;
+    }
+
+    public String getServiceTier() {
+        return serviceTier;
+    }
+
+    public void setServiceTier(String serviceTier) {
+        this.serviceTier = serviceTier;
+    }
+
+    public Boolean getStore() {
+        return store;
+    }
+
+    public void setStore(Boolean store) {
+        this.store = store;
+    }
+
+    public Integer getTopLogprobs() {
+        return topLogprobs;
+    }
+
+    public void setTopLogprobs(Integer topLogprobs) {
+        this.topLogprobs = topLogprobs;
+    }
+
+    public WebSearchOptions getWebSearchOptions() {
+        return webSearchOptions;
+    }
+
+    public void setWebSearchOptions(WebSearchOptions webSearchOptions) {
+        this.webSearchOptions = webSearchOptions;
     }
 
     /**
@@ -274,6 +497,9 @@ public class ChatCompletionRequest {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class ResponseFormat {
         private String type;
+        
+        @JsonProperty("json_schema")
+        private JsonSchema jsonSchema;
 
         public ResponseFormat() {
         }
@@ -288,6 +514,48 @@ public class ChatCompletionRequest {
 
         public void setType(String type) {
             this.type = type;
+        }
+        
+        public JsonSchema getJsonSchema() {
+            return jsonSchema;
+        }
+        
+        public void setJsonSchema(JsonSchema jsonSchema) {
+            this.jsonSchema = jsonSchema;
+        }
+        
+        /**
+         * JSON Schema 定义
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public static class JsonSchema {
+            private String name;
+            private Map<String, Object> schema;
+            private Boolean strict;
+            
+            public String getName() {
+                return name;
+            }
+            
+            public void setName(String name) {
+                this.name = name;
+            }
+            
+            public Map<String, Object> getSchema() {
+                return schema;
+            }
+            
+            public void setSchema(Map<String, Object> schema) {
+                this.schema = schema;
+            }
+            
+            public Boolean getStrict() {
+                return strict;
+            }
+            
+            public void setStrict(Boolean strict) {
+                this.strict = strict;
+            }
         }
     }
 
@@ -312,6 +580,72 @@ public class ChatCompletionRequest {
 
         public void setIncludeUsage(Boolean includeUsage) {
             this.includeUsage = includeUsage;
+        }
+    }
+
+    /**
+     * 音频参数
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class AudioParams {
+        private String voice;
+        private String format;
+
+        public String getVoice() {
+            return voice;
+        }
+
+        public void setVoice(String voice) {
+            this.voice = voice;
+        }
+
+        public String getFormat() {
+            return format;
+        }
+
+        public void setFormat(String format) {
+            this.format = format;
+        }
+    }
+
+    /**
+     * 预测输出配置
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class Prediction {
+        private String type;
+        private String content;
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public String getContent() {
+            return content;
+        }
+
+        public void setContent(String content) {
+            this.content = content;
+        }
+    }
+
+    /**
+     * 网络搜索选项
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class WebSearchOptions {
+        private Boolean enable;
+
+        public Boolean getEnable() {
+            return enable;
+        }
+
+        public void setEnable(Boolean enable) {
+            this.enable = enable;
         }
     }
 }
