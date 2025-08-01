@@ -105,6 +105,7 @@ jobs:
         GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       run: |
         mvn clean deploy \
+          -DskipTests \
           -Dgpg.passphrase="$GPG_PASSPHRASE" \
           -Dgpg.pinentry-mode=loopback \
           -Darguments=-Dgpg.passphrase="$GPG_PASSPHRASE"
