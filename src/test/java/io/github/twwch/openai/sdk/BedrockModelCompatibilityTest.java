@@ -4,8 +4,8 @@ import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
 import io.github.twwch.openai.sdk.model.chat.ChatMessage;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * 测试不同Claude模型的兼容性
@@ -16,116 +16,124 @@ public class BedrockModelCompatibilityTest {
         // 从环境变量获取凭证
         String bearerKey = System.getenv("AWS_BEARER_KEY_BEDROCK");
         String bearerToken = System.getenv("AWS_BEARER_TOKEN_BEDROCK");
-        
+        String modelId =  "us.anthropic.claude-3-7-sonnet-20250219-v1:0";
+
         if (bearerKey == null || bearerToken == null) {
             System.err.println("请设置环境变量 AWS_BEARER_KEY_BEDROCK 和 AWS_BEARER_TOKEN_BEDROCK");
             System.exit(1);
         }
-        
-        String region = "us-east-2";
-        
-        // 测试不同的模型ID
-        String[] modelIds = {
-            // Claude 3.7 Sonnet (可能有问题的)
-            "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
-            
-            // Claude 3.5 Sonnet
-            "anthropic.claude-3-5-sonnet-20240620-v1:0",
-            
-            // Claude 3 系列
-            "anthropic.claude-3-sonnet-20240229",
-            "anthropic.claude-3-haiku-20240307-v1:0",
-            "anthropic.claude-3-opus-20240229-v1:0",
-            
-            // Claude 2 系列
-            "anthropic.claude-v2:1",
-            "anthropic.claude-v2",
-            "anthropic.claude-instant-v1"
-        };
-        
-        for (String modelId : modelIds) {
-            System.out.println("\n==========================================");
-            System.out.println("测试模型: " + modelId);
-            System.out.println("==========================================");
-            
-            try {
-                // 测试非流式请求
-                testNonStreaming(region, bearerKey, bearerToken, modelId);
-                
-                // 测试流式请求
-                testStreaming(region, bearerKey, bearerToken, modelId);
-                
-                System.out.println("✅ 模型 " + modelId + " 测试通过");
-                
-            } catch (Exception e) {
-                System.err.println("❌ 模型 " + modelId + " 测试失败");
-                System.err.println("   错误: " + e.getMessage());
-                if (e.getMessage() != null && e.getMessage().contains("METRIC_VALUES")) {
-                    System.err.println("   可能原因: 模型不支持on-demand throughput");
-                }
-            }
-        }
-    }
-    
-    // 测试非流式请求
-    private static void testNonStreaming(String region, String bearerKey, String bearerToken, String modelId) throws Exception {
-        System.out.print("  测试非流式请求... ");
-        
-        OpenAI client = OpenAI.bedrock(region, bearerKey, bearerToken, modelId);
-        
+
+        System.out.println("Bearer Key: " + bearerKey);
+        System.out.println("Bearer Token: " + bearerToken);
+        System.out.println("modelId: " + modelId);
+
+        OpenAI client = OpenAI.bedrock("us-east-2", bearerKey, bearerToken, modelId);
+
+        List<ChatMessage> messages = new ArrayList<>();
+        messages.add(ChatMessage.user("计算 123 + 456 的结果"));
+
+        // 创建计算工具
+        List<ChatCompletionRequest.Tool> tools = new ArrayList<>();
+        ChatCompletionRequest.Tool calcTool = new ChatCompletionRequest.Tool();
+        calcTool.setType("function");
+
+        ChatCompletionRequest.Function calcFunction = new ChatCompletionRequest.Function();
+        calcFunction.setName("calculate");
+        calcFunction.setDescription("执行数学计算");
+
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("type", "object");
+
+        Map<String, Object> properties = new HashMap<>();
+        Map<String, Object> expression = new HashMap<>();
+        expression.put("type", "string");
+        expression.put("description", "要计算的数学表达式");
+        properties.put("expression", expression);
+
+        parameters.put("properties", properties);
+        parameters.put("required", Collections.singletonList("expression"));
+
+        calcFunction.setParameters(parameters);
+        calcTool.setFunction(calcFunction);
+        tools.add(calcTool);
+
+        // 创建流式请求
         ChatCompletionRequest request = new ChatCompletionRequest();
         request.setModel(modelId);
-        
-        List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.user("Say 'test'"));
         request.setMessages(messages);
-        
-        ChatCompletionResponse response = client.createChatCompletion(request);
-        System.out.println("成功 - 响应: " + response.getContent());
-    }
-    
-    // 测试流式请求
-    private static void testStreaming(String region, String bearerKey, String bearerToken, String modelId) throws Exception {
-        System.out.print("  测试流式请求... ");
-        
-        OpenAI client = OpenAI.bedrock(region, bearerKey, bearerToken, modelId);
-        
-        ChatCompletionRequest request = new ChatCompletionRequest();
-        request.setModel(modelId);
-        
-        List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.user("Say 'stream test'"));
-        request.setMessages(messages);
-        
+        request.setTools(tools);
         request.setStream(true);
-        
-        StringBuilder result = new StringBuilder();
-        final boolean[] hasError = {false};
-        
+
+        // 设置stream_options
+        ChatCompletionRequest.StreamOptions streamOptions = new ChatCompletionRequest.StreamOptions(true);
+        request.setStreamOptions(streamOptions);
+
+        // 清除默认值
+        request.setTemperature(null);
+        request.setTopP(null);
+        request.setN(null);
+        request.setPresencePenalty(null);
+        request.setFrequencyPenalty(null);
+        request.setLogprobs(null);
+        request.setServiceTier(null);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        StringBuilder contentBuilder = new StringBuilder();
+        final ChatCompletionResponse.Usage[] finalUsage = {null};
+
+        System.out.println("\n流式响应:");
+
         client.createChatCompletionStream(
-            request,
-            chunk -> {
-                String content = chunk.getContent();
-                if (content != null) {
-                    result.append(content);
+                request,
+                chunk -> {
+                    // 收集内容
+                    String content = chunk.getContent();
+                    if (content != null && !content.isEmpty()) {
+                        System.out.print(content);
+                        contentBuilder.append(content);
+                    }
+
+                    // 收集usage信息 - message_delta事件包含累积的usage
+                    if (chunk.getUsage() != null) {
+                        finalUsage[0] = chunk.getUsage();
+                    }
+
+                    // 检查是否是最后一个chunk
+                    if (chunk.getChoices() != null && !chunk.getChoices().isEmpty()) {
+                        String finishReason = chunk.getChoices().get(0).getFinishReason();
+                        if ("stop".equals(finishReason) && chunk.getUsage() == null && finalUsage[0] == null) {
+                            // 如果是最后一个chunk但没有usage，可能需要从其他地方获取
+                            System.out.println("\n[注意] 最后一个chunk没有包含usage信息");
+                        }
+                    }
+                },
+                () -> {
+                    System.out.println("\n\n流式响应完成");
+
+                    // 流式响应中的工具调用需要特别处理
+                    // Bedrock的流式响应可能不会返回工具调用
+                    String fullContent = contentBuilder.toString();
+                    System.out.println("\n完整响应内容: " + fullContent);
+
+                    // 显示usage信息
+                    if (finalUsage[0] != null) {
+                        System.out.println("\nUsage信息:");
+                        System.out.println("  输入tokens: " + finalUsage[0].getPromptTokens());
+                        System.out.println("  输出tokens: " + finalUsage[0].getCompletionTokens());
+                        System.out.println("  总tokens: " + finalUsage[0].getTotalTokens());
+                    } else {
+                        System.out.println("\n未获取到Usage信息");
+                    }
+
+                    latch.countDown();
+                },
+                error -> {
+                    System.err.println("错误: " + error.getMessage());
+                    error.printStackTrace();
+                    latch.countDown();
                 }
-            },
-            () -> {
-                // 完成
-            },
-            error -> {
-                hasError[0] = true;
-                throw new RuntimeException(error.getMessage());
-            }
         );
-        
-        // 等待响应
-        Thread.sleep(2000);
-        
-        if (!hasError[0] && result.length() > 0) {
-            System.out.println("成功 - 响应: " + result.toString());
-        } else {
-            throw new RuntimeException("流式请求失败");
-        }
+
+        latch.await();
     }
 }
