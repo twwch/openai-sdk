@@ -1,15 +1,15 @@
 # OpenAI Java SDK
 
-A Java SDK for interacting with OpenAI and Azure OpenAI APIs.
+A Java SDK for interacting with OpenAI, Azure OpenAI, and AWS Bedrock APIs.
 
 ## Overview
 
-This SDK provides a simple and intuitive way to integrate OpenAI services into your Java applications. It supports both standard OpenAI API and Azure OpenAI Service endpoints.
+This SDK provides a simple and intuitive way to integrate AI services into your Java applications. It supports standard OpenAI API, Azure OpenAI Service endpoints, and AWS Bedrock with a unified interface.
 
 ## Features
 
 - Easy-to-use API client for OpenAI services
-- Support for both OpenAI and Azure OpenAI endpoints
+- Support for OpenAI, Azure OpenAI, and AWS Bedrock endpoints
 - Chat completion API support
 - Streaming responses support
 - Function calling and tool use support
@@ -17,6 +17,7 @@ This SDK provides a simple and intuitive way to integrate OpenAI services into y
 - Comprehensive error handling
 - Type-safe request/response models
 - Simplified API methods for common use cases
+- Automatic format conversion between different AI providers
 
 ## Requirements
 
@@ -31,7 +32,7 @@ Add the following dependency to your `pom.xml`:
 <dependency>
     <groupId>io.github.twwch</groupId>
     <artifactId>openai-sdk</artifactId>
-    <version>1.1.4</version>
+    <version>1.1.7</version>
 </dependency>
 ```
 
@@ -79,6 +80,39 @@ public class AzureExample {
         // Usage is the same as standard OpenAI
         String response = openai.chat("gpt-35-turbo", "Tell me a joke");
         System.out.println(response);
+    }
+}
+```
+
+### AWS Bedrock Example
+
+```java
+import io.github.twwch.openai.sdk.OpenAI;
+
+public class BedrockExample {
+    public static void main(String[] args) {
+        // Configure Bedrock client (uses default AWS credentials)
+        OpenAI openai = OpenAI.bedrock(
+            "us-east-1",
+            "anthropic.claude-3-sonnet-20240229"
+        );
+        
+        // Usage is the same as OpenAI
+        String response = openai.chat("claude", "Tell me about AWS Bedrock");
+        System.out.println(response);
+        
+        // With explicit credentials
+        OpenAI openai2 = OpenAI.bedrock(
+            "us-east-1",
+            "your-access-key-id",
+            "your-secret-access-key",
+            "anthropic.claude-3-haiku-20240307"
+        );
+        
+        // Streaming also works
+        openai2.chatStream("claude", "Write a poem", 
+            chunk -> System.out.print(chunk)
+        );
     }
 }
 ```
@@ -351,18 +385,24 @@ openai-sdk/
 │   │           ├── OpenAI.java              # Main client class
 │   │           ├── OpenAIConfig.java        # Configuration for OpenAI
 │   │           ├── AzureOpenAIConfig.java   # Configuration for Azure OpenAI
+│   │           ├── BedrockConfig.java       # Configuration for AWS Bedrock
 │   │           ├── exception/               # Custom exceptions
 │   │           ├── http/                    # HTTP client implementation
 │   │           ├── model/                   # Request/Response models
 │   │           ├── service/                 # Service implementations
+│   │           │   ├── OpenAIService.java   # OpenAI service
+│   │           │   ├── BedrockService.java  # Bedrock service
+│   │           │   └── bedrock/             # Bedrock model adapters
 │   │           └── example/                 # Example usage
 │   └── test/
 │       └── java/
 │           └── io/github/twwch/openai/sdk/
-│               └── OpenAITest.java          # Unit tests
+│               ├── OpenAITest.java          # OpenAI tests
+│               └── BedrockTest.java         # Bedrock tests
 ├── pom.xml
 ├── .gitignore
-└── README.md
+├── README.md
+└── BEDROCK_USAGE.md                        # Detailed Bedrock usage guide
 ```
 
 ## API Reference
@@ -378,6 +418,10 @@ OpenAI openai = new OpenAI("api-key", "https://api.openai.com/v1");
 
 // Azure OpenAI
 OpenAI openai = OpenAI.azure("api-key", "resource-name", "deployment-id");
+
+// AWS Bedrock
+OpenAI openai = OpenAI.bedrock("region", "model-id");
+OpenAI openai = OpenAI.bedrock("region", "access-key", "secret-key", "model-id");
 ```
 
 ### Chat Completions
@@ -481,3 +525,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [GitHub Repository](https://github.com/twwch/openai-sdk)
 - [OpenAI API Documentation](https://platform.openai.com/docs/api-reference)
 - [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
+- [AWS Bedrock Documentation](https://docs.aws.amazon.com/bedrock/)
+- [Detailed Bedrock Usage Guide](BEDROCK_USAGE.md)

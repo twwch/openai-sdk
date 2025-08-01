@@ -99,3 +99,4 @@ check-repo-settings.md
 *.asc
 *-key.txt
 *-key-base64.txt
+simple_streaming_test.py

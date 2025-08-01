@@ -60,6 +60,41 @@ public class OpenAI {
     public static OpenAI azure(String apiKey, String resourceName, String deploymentId, String apiVersion) {
         return new OpenAI(new AzureOpenAIConfig(apiKey, resourceName, deploymentId, apiVersion));
     }
+    
+    /**
+     * 创建Bedrock客户端（使用默认凭证）
+     * @param region AWS区域
+     * @param modelId Bedrock模型ID
+     * @return Bedrock客户端
+     */
+    public static OpenAI bedrock(String region, String modelId) {
+        return new OpenAI(new BedrockConfig(region, modelId));
+    }
+    
+    /**
+     * 创建Bedrock客户端（使用访问密钥）
+     * @param region AWS区域
+     * @param accessKeyId AWS访问密钥ID
+     * @param secretAccessKey AWS密钥
+     * @param modelId Bedrock模型ID
+     * @return Bedrock客户端
+     */
+    public static OpenAI bedrock(String region, String accessKeyId, String secretAccessKey, String modelId) {
+        return new OpenAI(new BedrockConfig(region, accessKeyId, secretAccessKey, modelId));
+    }
+    
+    /**
+     * 创建Bedrock客户端（使用临时凭证）
+     * @param region AWS区域
+     * @param accessKeyId AWS访问密钥ID
+     * @param secretAccessKey AWS密钥
+     * @param sessionToken 会话令牌
+     * @param modelId Bedrock模型ID
+     * @return Bedrock客户端
+     */
+    public static OpenAI bedrock(String region, String accessKeyId, String secretAccessKey, String sessionToken, String modelId) {
+        return new OpenAI(new BedrockConfig(region, accessKeyId, secretAccessKey, sessionToken, modelId));
+    }
 
     /**
      * 使用配置创建OpenAI客户端
@@ -203,7 +238,7 @@ public class OpenAI {
         createChatCompletionStream(request, 
             chunk -> {
                 String content = chunk.getContent();
-                if (content != null && !content.isEmpty()) {
+                if (content != null) {
                     onChunk.accept(content);
                 }
             },

@@ -92,4 +92,12 @@ public class OpenAIConfig {
     public boolean isAzure() {
         return false;
     }
+    
+    /**
+     * 是否为Bedrock配置
+     * @return 是否为Bedrock配置
+     */
+    public boolean isBedrock() {
+        return false;
+    }
 }

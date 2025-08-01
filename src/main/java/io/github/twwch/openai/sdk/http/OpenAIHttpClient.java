@@ -12,7 +12,6 @@ import okhttp3.sse.EventSourceListener;
 import okhttp3.sse.EventSources;
 
 import java.io.IOException;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -27,12 +26,24 @@ public class OpenAIHttpClient {
         this.config = config;
         this.objectMapper = new ObjectMapper();
         
+        // 创建自定义的线程池，使用守护线程
+        java.util.concurrent.ThreadFactory threadFactory = new java.util.concurrent.ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread thread = new Thread(r);
+                thread.setDaemon(true); // 设置为守护线程
+                thread.setName("OkHttp-" + thread.getId());
+                return thread;
+            }
+        };
+        
         // 为流式请求创建一个带有较短保持时间的OkHttpClient
         this.client = new OkHttpClient.Builder()
                 .connectTimeout(config.getTimeout(), TimeUnit.SECONDS)
                 .readTimeout(config.getTimeout(), TimeUnit.SECONDS)
                 .writeTimeout(config.getTimeout(), TimeUnit.SECONDS)
-                .connectionPool(new ConnectionPool(5, 5, TimeUnit.SECONDS)) // 5秒后关闭空闲连接
+                .connectionPool(new ConnectionPool(50, 5, TimeUnit.MINUTES)) // 增加连接池大小，支持更多并发
+                .dispatcher(new Dispatcher(java.util.concurrent.Executors.newCachedThreadPool(threadFactory)))
                 .build();
     }
 

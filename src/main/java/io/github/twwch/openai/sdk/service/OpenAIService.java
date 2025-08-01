@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.twwch.openai.sdk.AzureOpenAIConfig;
+import io.github.twwch.openai.sdk.BedrockConfig;
 import io.github.twwch.openai.sdk.OpenAIConfig;
 import io.github.twwch.openai.sdk.exception.OpenAIException;
 import io.github.twwch.openai.sdk.http.OpenAIHttpClient;
@@ -12,14 +13,11 @@ import io.github.twwch.openai.sdk.model.ModelInfo;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionChunk;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
-import okhttp3.ResponseBody;
 import okhttp3.sse.EventSource;
 import okhttp3.sse.EventSourceListener;
-import okhttp3.sse.EventSources;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -31,11 +29,20 @@ public class OpenAIService {
     private final OpenAIHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final OpenAIConfig config;
+    private final BedrockService bedrockService;
 
     public OpenAIService(OpenAIConfig config) {
         this.config = config;
-        this.httpClient = new OpenAIHttpClient(config);
         this.objectMapper = new ObjectMapper();
+        
+        // 如果是Bedrock配置，创建Bedrock服务
+        if (config.isBedrock()) {
+            this.bedrockService = new BedrockService((BedrockConfig) config);
+            this.httpClient = null;
+        } else {
+            this.bedrockService = null;
+            this.httpClient = new OpenAIHttpClient(config);
+        }
     }
 
     /**
@@ -45,6 +52,10 @@ public class OpenAIService {
      * @throws OpenAIException 如果请求失败
      */
     public List<ModelInfo> listModels() throws OpenAIException {
+        // 如果是Bedrock，使用Bedrock服务
+        if (config.isBedrock()) {
+            return bedrockService.listModels();
+        }
         String response = httpClient.get("/models");
         try {
             if (config.isAzure()) {
@@ -83,6 +94,10 @@ public class OpenAIService {
      * @throws OpenAIException 如果请求失败
      */
     public ModelInfo getModel(String modelId) throws OpenAIException {
+        // 如果是Bedrock，使用Bedrock服务
+        if (config.isBedrock()) {
+            return bedrockService.getModel(modelId);
+        }
         String response = httpClient.get("/models/" + modelId);
         try {
             return objectMapper.readValue(response, ModelInfo.class);
@@ -99,6 +114,10 @@ public class OpenAIService {
      * @throws OpenAIException 如果请求失败
      */
     public ChatCompletionResponse createChatCompletion(ChatCompletionRequest request) throws OpenAIException {
+        // 如果是Bedrock，使用Bedrock服务
+        if (config.isBedrock()) {
+            return bedrockService.createChatCompletion(request);
+        }
         // 如果是Azure OpenAI，并且没有设置模型，则使用部署ID作为模型
         if (config.isAzure() && (request.getModel() == null || request.getModel().isEmpty())) {
             AzureOpenAIConfig azureConfig = (AzureOpenAIConfig) config;
@@ -125,13 +144,18 @@ public class OpenAIService {
                                            Consumer<ChatCompletionChunk> onChunk,
                                            Runnable onComplete,
                                            Consumer<Throwable> onError) throws OpenAIException {
+        // 如果是Bedrock，使用Bedrock服务
+        if (config.isBedrock()) {
+            bedrockService.createChatCompletionStream(request, onChunk, onComplete, onError);
+            return;
+        }
         // 设置流式标志
         request.setStream(true);
         
-        // 设置stream_options以包含usage信息
-        if (request.getStreamOptions() == null) {
-            request.setStreamOptions(new ChatCompletionRequest.StreamOptions(true));
-        }
+        // 注释掉自动设置stream_options，让用户自己决定是否需要
+        // if (request.getStreamOptions() == null) {
+        //     request.setStreamOptions(new ChatCompletionRequest.StreamOptions(true));
+        // }
         
         // 如果是Azure OpenAI，并且没有设置模型，则使用部署ID作为模型
         if (config.isAzure() && (request.getModel() == null || request.getModel().isEmpty())) {
@@ -197,23 +221,9 @@ public class OpenAIService {
                 
                 try {
                     ChatCompletionChunk chunk = objectMapper.readValue(data, ChatCompletionChunk.class);
-                    // 只有当chunk包含实际内容时才调用回调
+                    // 只要有chunk就调用回调，包括空内容的chunk
                     if (onChunk != null) {
-                        String content = chunk.getContent();
-                        // 过滤掉空内容的chunk，但仍然允许包含finish_reason、usage等元数据的chunk通过
-                        if (content != null && !content.isEmpty()) {
-                            onChunk.accept(chunk);
-                        } else if (chunk.getChoices() != null && !chunk.getChoices().isEmpty()) {
-                            // 检查是否有其他重要信息（如finish_reason）
-                            ChatCompletionChunk.Choice choice = chunk.getChoices().get(0);
-                            if (choice.getFinishReason() != null || 
-                                (choice.getDelta() != null && choice.getDelta().getToolCalls() != null)) {
-                                onChunk.accept(chunk);
-                            }
-                        } else if (chunk.getUsage() != null) {
-                            // 如果chunk包含usage信息，也调用回调
-                            onChunk.accept(chunk);
-                        }
+                        onChunk.accept(chunk);
                     }
                 } catch (JsonProcessingException e) {
                     isDone = true;
