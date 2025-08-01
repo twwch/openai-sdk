@@ -9,6 +9,7 @@ import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
 import io.github.twwch.openai.sdk.service.bedrock.BedrockModelAdapter;
 import io.github.twwch.openai.sdk.service.bedrock.BedrockModelAdapterFactory;
+import io.github.twwch.openai.sdk.service.bedrock.BedrockRequestValidator;
 import software.amazon.awssdk.auth.credentials.*;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.regions.Region;
@@ -35,10 +36,10 @@ public class BedrockService {
         this.config = config;
         this.objectMapper = new ObjectMapper();
         
-        // 创建AWS凭证提供者
-        AwsCredentialsProvider credentialsProvider = createCredentialsProvider();
+        // 创建AWS凭证提供者 - 确保只使用显式提供的凭证
+        AwsCredentialsProvider credentialsProvider = createIsolatedCredentialsProvider();
         
-        // 创建Bedrock客户端
+        // 创建Bedrock客户端 - 使用显式凭证提供者，不会使用默认凭证链
         this.client = BedrockRuntimeClient.builder()
                 .region(Region.of(config.getRegion()))
                 .credentialsProvider(credentialsProvider)
@@ -53,36 +54,42 @@ public class BedrockService {
         this.modelAdapter = BedrockModelAdapterFactory.createAdapter(config.getModelId());
     }
 
-    private AwsCredentialsProvider createCredentialsProvider() {
-        if (config.getAccessKeyId() != null && config.getSecretAccessKey() != null) {
-            // 检查是否是 Bedrock API Key 格式
-            if (config.getAccessKeyId().startsWith("BedrockAPIKey-")) {
-                // 这是 Bedrock 特定的 API Key，需要特殊处理
-                // 注意：AWS SDK 可能不直接支持这种格式，需要使用特定的认证方式
-                System.err.println("警告：检测到 Bedrock API Key 格式，但当前可能需要标准 AWS 凭证");
-            }
-            
-            if (config.getSessionToken() != null) {
-                // 使用临时凭证
-                return StaticCredentialsProvider.create(
-                    AwsSessionCredentials.create(
-                        config.getAccessKeyId(),
-                        config.getSecretAccessKey(),
-                        config.getSessionToken()
-                    )
-                );
-            } else {
-                // 使用永久凭证
-                return StaticCredentialsProvider.create(
-                    AwsBasicCredentials.create(
-                        config.getAccessKeyId(),
-                        config.getSecretAccessKey()
-                    )
-                );
-            }
+    /**
+     * 创建隔离的凭证提供者，确保只使用显式提供的凭证
+     * 不会从环境变量、系统属性或其他来源获取凭证
+     */
+    private AwsCredentialsProvider createIsolatedCredentialsProvider() {
+        // 必须提供凭证，不使用默认凭证链
+        if (config.getAccessKeyId() == null || config.getSecretAccessKey() == null) {
+            throw new IllegalArgumentException(
+                "Bedrock服务需要显式提供AWS凭证。" +
+                "请通过 OpenAI.bedrock(region, accessKeyId, secretAccessKey, modelId) 提供凭证。"
+            );
+        }
+        
+        // 检查是否是 Bedrock API Key 格式
+        if (config.getAccessKeyId().startsWith("BedrockAPIKey-")) {
+            System.out.println("检测到 Bedrock API Key 格式");
+        }
+        
+        // 始终使用StaticCredentialsProvider，确保凭证隔离
+        if (config.getSessionToken() != null) {
+            // 使用临时凭证（三个参数）
+            return StaticCredentialsProvider.create(
+                AwsSessionCredentials.create(
+                    config.getAccessKeyId(),
+                    config.getSecretAccessKey(),
+                    config.getSessionToken()
+                )
+            );
         } else {
-            // 使用默认凭证链
-            return DefaultCredentialsProvider.create();
+            // 使用永久凭证（两个参数）
+            return StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(
+                    config.getAccessKeyId(),
+                    config.getSecretAccessKey()
+                )
+            );
         }
     }
 
@@ -137,6 +144,9 @@ public class BedrockService {
      */
     public ChatCompletionResponse createChatCompletion(ChatCompletionRequest request) throws OpenAIException {
         try {
+            // 验证和清理请求参数
+            BedrockRequestValidator.validateAndCleanRequest(request);
+            
             // 使用配置的模型ID覆盖请求中的模型
             String modelId = config.getModelId();
             
@@ -180,14 +190,18 @@ public class BedrockService {
                                           Runnable onComplete,
                                           Consumer<Throwable> onError) throws OpenAIException {
         try {
+            // 验证和清理请求参数
+            BedrockRequestValidator.validateAndCleanRequest(request);
+            
             // 使用配置的模型ID覆盖请求中的模型
             String modelId = config.getModelId();
             
             // 转换请求格式（流式）
             String bedrockRequest = modelAdapter.convertStreamRequest(request, objectMapper);
             
-            // 调试：打印请求长度
+            // 调试：打印请求长度和内容
             System.out.println("Bedrock流式请求长度: " + bedrockRequest.length() + " bytes");
+            System.out.println("Bedrock流式请求内容: " + bedrockRequest);
             if (bedrockRequest.length() > 100000) {
                 System.out.println("警告：请求体过大，可能超出限制");
             }
@@ -229,6 +243,13 @@ public class BedrockService {
                     })
                     .onError(throwable -> {
                         if (onError != null) {
+                            // 打印详细错误信息
+                            System.err.println("Bedrock流式请求错误类型: " + throwable.getClass().getName());
+                            System.err.println("Bedrock流式请求错误消息: " + throwable.getMessage());
+                            if (throwable.getCause() != null) {
+                                System.err.println("Bedrock流式请求错误原因: " + throwable.getCause().getMessage());
+                            }
+                            throwable.printStackTrace();
                             onError.accept(new OpenAIException("Bedrock流式请求失败: " + throwable.getMessage(), throwable));
                         }
                     })

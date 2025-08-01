@@ -32,7 +32,7 @@ Add the following dependency to your `pom.xml`:
 <dependency>
     <groupId>io.github.twwch</groupId>
     <artifactId>openai-sdk</artifactId>
-    <version>1.1.10</version>
+    <version>1.1.11</version>
 </dependency>
 ```
 
@@ -91,9 +91,11 @@ import io.github.twwch.openai.sdk.OpenAI;
 
 public class BedrockExample {
     public static void main(String[] args) {
-        // Configure Bedrock client (uses default AWS credentials)
+        // Configure Bedrock client with explicit credentials (recommended)
         OpenAI openai = OpenAI.bedrock(
             "us-east-1",
+            "your-access-key-id",
+            "your-secret-access-key",
             "anthropic.claude-3-sonnet-20240229"
         );
         
@@ -101,11 +103,11 @@ public class BedrockExample {
         String response = openai.chat("claude", "Tell me about AWS Bedrock");
         System.out.println(response);
         
-        // With explicit credentials
+        // With Bedrock API Key format
         OpenAI openai2 = OpenAI.bedrock(
             "us-east-1",
-            "your-access-key-id",
-            "your-secret-access-key",
+            "BedrockAPIKey-xxx",
+            "your-session-token",
             "anthropic.claude-3-haiku-20240307"
         );
         
@@ -116,6 +118,8 @@ public class BedrockExample {
     }
 }
 ```
+
+**Important**: AWS Bedrock integration uses credential isolation to prevent conflicts with other AWS services. Always provide explicit credentials for Bedrock. See the [AWS Credential Isolation Guide](AWS_CREDENTIAL_ISOLATION_GUIDE.md) for details.
 
 ### Function Calling (Tool Use)
 
@@ -374,6 +378,26 @@ public class ToolUseExample {
 }
 ```
 
+## Troubleshooting
+
+### AWS Bedrock Integration Issues
+
+If you encounter credential conflicts or 403 errors when using Bedrock in projects with existing AWS configurations:
+
+1. **Always use explicit credentials** - The SDK enforces credential isolation to prevent conflicts
+2. **Check the guides**:
+   - [AWS Credential Isolation Guide](AWS_CREDENTIAL_ISOLATION_GUIDE.md) - Detailed explanation of credential isolation
+   - [Spring Boot Integration Guide](SPRING_BOOT_INTEGRATION_GUIDE.md) - Special considerations for Spring Boot projects
+   - [External Project Integration Issue Guide](EXTERNAL_PROJECT_INTEGRATION_ISSUE.md) - Solutions for dependency conflicts
+
+3. **Run diagnostics** - Use the included `BedrockDependencyDiagnostic` tool to check for dependency conflicts
+
+### Common Issues
+
+- **METRIC_VALUES error**: The SDK automatically filters unsupported OpenAI parameters for Bedrock
+- **Missing usage information**: Token usage is automatically included in streaming responses
+- **Tool calling with Bedrock**: The SDK handles format conversion between OpenAI and Bedrock APIs
+
 ## Project Structure
 
 ```
@@ -402,7 +426,10 @@ openai-sdk/
 ├── pom.xml
 ├── .gitignore
 ├── README.md
-└── BEDROCK_USAGE.md                        # Detailed Bedrock usage guide
+├── BEDROCK_USAGE.md                        # Detailed Bedrock usage guide
+├── AWS_CREDENTIAL_ISOLATION_GUIDE.md       # AWS credential isolation explanation
+├── SPRING_BOOT_INTEGRATION_GUIDE.md        # Spring Boot integration guide
+└── EXTERNAL_PROJECT_INTEGRATION_ISSUE.md   # External project integration troubleshooting
 ```
 
 ## API Reference
