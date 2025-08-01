@@ -118,11 +118,13 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
             bedrockRequest.put("max_tokens", 4096); // Claude默认值
         }
         
-        if (request.getTemperature() != null) {
+        // 只有在temperature不为null且不等于默认值1.0时才设置
+        if (request.getTemperature() != null && !request.getTemperature().equals(1.0)) {
             bedrockRequest.put("temperature", request.getTemperature());
         }
         
-        if (request.getTopP() != null) {
+        // 只有在top_p不为null且不等于默认值1.0时才设置
+        if (request.getTopP() != null && !request.getTopP().equals(1.0)) {
             bedrockRequest.put("top_p", request.getTopP());
         }
         
@@ -137,8 +139,10 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
         // 转换工具定义
         if (request.getTools() != null && !request.getTools().isEmpty()) {
             ArrayNode bedrockTools = objectMapper.createArrayNode();
+            
             for (ChatCompletionRequest.Tool tool : request.getTools()) {
                 if ("function".equals(tool.getType()) && tool.getFunction() != null) {
+
                     ObjectNode bedrockTool = objectMapper.createObjectNode();
                     ChatCompletionRequest.Function function = tool.getFunction();
                     
@@ -149,13 +153,13 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                     if (function.getParameters() != null) {
                         bedrockTool.set("input_schema", objectMapper.valueToTree(function.getParameters()));
                     }
-                    
                     bedrockTools.add(bedrockTool);
                 }
             }
             
             if (bedrockTools.size() > 0) {
                 bedrockRequest.set("tools", bedrockTools);
+                System.out.println("添加了 " + bedrockTools.size() + " 个工具到请求中");
             }
         }
         

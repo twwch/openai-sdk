@@ -142,7 +142,17 @@ public class BedrockService {
             
             // 转换请求格式
             String bedrockRequest = modelAdapter.convertRequest(request, objectMapper);
-            System.out.println("Bedrock请求: " + bedrockRequest);
+            
+            // 调试信息
+            System.out.println("Bedrock请求长度: " + bedrockRequest.length() + " bytes");
+            if (bedrockRequest.length() > 100000) {
+                System.out.println("警告：请求体过大，可能超出限制");
+            }
+            // 只在调试模式下打印完整请求
+            if (System.getProperty("bedrock.debug", "false").equals("true")) {
+                System.out.println("Bedrock请求: " + bedrockRequest);
+            }
+            
             // 调用Bedrock API
             InvokeModelRequest invokeRequest = InvokeModelRequest.builder()
                     .modelId(modelId)
@@ -175,6 +185,12 @@ public class BedrockService {
             
             // 转换请求格式（流式）
             String bedrockRequest = modelAdapter.convertStreamRequest(request, objectMapper);
+            
+            // 调试：打印请求长度
+            System.out.println("Bedrock流式请求长度: " + bedrockRequest.length() + " bytes");
+            if (bedrockRequest.length() > 100000) {
+                System.out.println("警告：请求体过大，可能超出限制");
+            }
             
             // 调用Bedrock流式API
             InvokeModelWithResponseStreamRequest invokeRequest = InvokeModelWithResponseStreamRequest.builder()
