@@ -27,6 +27,9 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
     public String convertRequest(ChatCompletionRequest request, ObjectMapper objectMapper) throws Exception {
         ObjectNode bedrockRequest = objectMapper.createObjectNode();
         
+        // 必须设置的参数
+        bedrockRequest.put("anthropic_version", "bedrock-2023-05-31");
+        
         // 转换消息格式
         List<ChatMessage> messages = request.getMessages();
         StringBuilder systemPrompt = new StringBuilder();
@@ -101,32 +104,35 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
             }
         }
         
-        // 构建请求
+        // 构建请求 - 必须参数
         bedrockRequest.set("messages", bedrockMessages);
         
-        // 设置系统提示
-        if (systemPrompt.length() > 0) {
-            bedrockRequest.put("system", systemPrompt.toString());
-        }
-        
-        // 设置模型参数
-        bedrockRequest.put("anthropic_version", "bedrock-2023-05-31");
-        
+        // max_tokens是必须的
         if (request.getMaxTokens() != null) {
             bedrockRequest.put("max_tokens", request.getMaxTokens());
         } else {
             bedrockRequest.put("max_tokens", 4096); // Claude默认值
         }
         
-        // 只有在temperature不为null且不等于默认值1.0时才设置
-        if (request.getTemperature() != null && !request.getTemperature().equals(1.0)) {
+        // 可选参数 - 只在非默认值时设置
+        
+        // system - 系统提示
+        if (systemPrompt.length() > 0) {
+            bedrockRequest.put("system", systemPrompt.toString());
+        }
+        
+        // temperature - 范围 0-1，默认 1
+        if (request.getTemperature() != null && request.getTemperature() >= 0 && request.getTemperature() <= 1) {
             bedrockRequest.put("temperature", request.getTemperature());
         }
         
-        // 只有在top_p不为null且不等于默认值1.0时才设置
-        if (request.getTopP() != null && !request.getTopP().equals(1.0)) {
+        // top_p - 范围 0-1，默认 0.999
+        if (request.getTopP() != null && request.getTopP() >= 0 && request.getTopP() <= 1) {
             bedrockRequest.put("top_p", request.getTopP());
         }
+        
+        // top_k - 范围 0-500，默认禁用
+        // OpenAI请求中没有top_k，所以跳过
         
         if (request.getStop() != null && !request.getStop().isEmpty()) {
             ArrayNode stopSequences = objectMapper.createArrayNode();

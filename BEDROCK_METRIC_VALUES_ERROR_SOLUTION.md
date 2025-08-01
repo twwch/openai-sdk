@@ -7,12 +7,16 @@ io.github.twwch.openai.sdk.exception.OpenAIException: Bedrock流式请求失败:
 
 ## 问题原因
 
-`METRIC_VALUES`错误通常由以下原因引起：
+`METRIC_VALUES`错误的主要原因是**请求包含了Bedrock不支持的OpenAI特有参数**。
 
-1. **工具数量过多** - 请求包含30+个工具定义，可能超出Bedrock限制
-2. **请求体过大** - AWS Bedrock有20MB的请求大小限制
-3. **不支持的参数** - 请求包含OpenAI特有但Bedrock不支持的参数
-4. **参数值组合问题** - 某些参数值组合可能导致验证失败
+具体导致错误的参数包括：
+- `n` - Bedrock不支持多个响应
+- `logprobs` - Bedrock不支持日志概率
+- `presence_penalty` - Bedrock不支持存在惩罚
+- `frequency_penalty` - Bedrock不支持频率惩罚
+- `service_tier` - Bedrock特有的服务层级概念
+
+即使是一个简单的126字节请求也会因为包含这些参数而失败。
 
 ## 解决方案
 

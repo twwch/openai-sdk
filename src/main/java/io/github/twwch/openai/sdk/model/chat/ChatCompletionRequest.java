@@ -141,34 +141,13 @@ public class ChatCompletionRequest {
 
     public ChatCompletionRequest() {
         this.messages = new ArrayList<>();
-        // 设置默认值
-        this.temperature = 1.0;
-        this.topP = 1.0;
-        this.n = 1;
-        this.presencePenalty = 0.0;
-        this.frequencyPenalty = 0.0;
-        this.logprobs = false;
-        this.serviceTier = "auto";
+        // 不设置默认值，让各个服务自己处理
     }
 
     public ChatCompletionRequest(String model, List<ChatMessage> messages) {
         this.model = model;
         this.messages = messages;
-        // 设置默认值
-        if (model != null && model.toLowerCase().contains("o3")) {
-            // o3 模型不设置这些默认值
-            this.temperature = null;
-            this.maxTokens = null;
-            this.parallelToolCalls = null;
-        } else {
-            this.temperature = 1.0;
-        }
-        this.topP = 1.0;
-        this.n = 1;
-        this.presencePenalty = 0.0;
-        this.frequencyPenalty = 0.0;
-        this.logprobs = false;
-        this.serviceTier = "auto";
+        // 不设置默认值，让各个服务自己处理
     }
 
     public String getModel() {
