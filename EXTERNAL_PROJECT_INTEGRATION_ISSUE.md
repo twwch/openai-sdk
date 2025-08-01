@@ -40,7 +40,7 @@ openai-sdk使用Jackson 2.17.2，如果外部项目使用不同版本，可能�
     <dependency>
         <groupId>io.github.twwch</groupId>
         <artifactId>openai-sdk</artifactId>
-        <version>1.1.11</version>
+        <version>1.1.13</version>
     </dependency>
 </dependencies>
 ```
@@ -51,7 +51,7 @@ openai-sdk使用Jackson 2.17.2，如果外部项目使用不同版本，可能�
 <dependency>
     <groupId>io.github.twwch</groupId>
     <artifactId>openai-sdk</artifactId>
-    <version>1.1.11</version>
+    <version>1.1.13</version>
     <exclusions>
         <exclusion>
             <groupId>software.amazon.awssdk</groupId>
@@ -206,7 +206,7 @@ mvn dependency:analyze
     <dependency>
         <groupId>io.github.twwch</groupId>
         <artifactId>openai-sdk</artifactId>
-        <version>1.1.11</version>
+        <version>1.1.13</version>
     </dependency>
 </dependencies>
 ```

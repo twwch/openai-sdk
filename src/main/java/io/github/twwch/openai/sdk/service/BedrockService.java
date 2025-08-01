@@ -11,6 +11,8 @@ import io.github.twwch.openai.sdk.service.bedrock.BedrockModelAdapter;
 import io.github.twwch.openai.sdk.service.bedrock.BedrockModelAdapterFactory;
 import io.github.twwch.openai.sdk.service.bedrock.BedrockRequestValidator;
 import software.amazon.awssdk.auth.credentials.*;
+import io.github.twwch.openai.sdk.service.bedrock.auth.BedrockApiKeyCredentialsProvider;
+import io.github.twwch.openai.sdk.service.bedrock.auth.BedrockCredentialsIsolator;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeAsyncClient;
@@ -36,30 +38,35 @@ public class BedrockService {
         this.config = config;
         this.objectMapper = new ObjectMapper();
         
-        // 创建AWS凭证提供者 - 确保只使用显式提供的凭证
-        AwsCredentialsProvider credentialsProvider = createIsolatedCredentialsProvider();
+        // 验证凭证
+        validateCredentials();
         
-        // 创建Bedrock客户端 - 使用显式凭证提供者，不会使用默认凭证链
-        this.client = BedrockRuntimeClient.builder()
-                .region(Region.of(config.getRegion()))
-                .credentialsProvider(credentialsProvider)
-                .build();
-                
-        this.asyncClient = BedrockRuntimeAsyncClient.builder()
-                .region(Region.of(config.getRegion()))
-                .credentialsProvider(credentialsProvider)
-                .build();
-                
+        // 使用隔离器创建客户端，确保完全隔离AWS环境凭证
+        this.client = BedrockCredentialsIsolator.createIsolatedClient(
+            config.getRegion(),
+            config.getAccessKeyId(),
+            config.getSecretAccessKey(),
+            config.getSessionToken()
+        );
+        
+        this.asyncClient = BedrockCredentialsIsolator.createIsolatedAsyncClient(
+            config.getRegion(),
+            config.getAccessKeyId(),
+            config.getSecretAccessKey(),
+            config.getSessionToken()
+        );
+        
         // 创建模型适配器
         this.modelAdapter = BedrockModelAdapterFactory.createAdapter(config.getModelId());
+        
+        // 打印调试信息
+        System.out.println("Bedrock服务已初始化，使用隔离的API Key凭证");
     }
 
     /**
-     * 创建隔离的凭证提供者，确保只使用显式提供的凭证
-     * 不会从环境变量、系统属性或其他来源获取凭证
+     * 验证凭证是否已提供
      */
-    private AwsCredentialsProvider createIsolatedCredentialsProvider() {
-        // 必须提供凭证，不使用默认凭证链
+    private void validateCredentials() {
         if (config.getAccessKeyId() == null || config.getSecretAccessKey() == null) {
             throw new IllegalArgumentException(
                 "Bedrock服务需要显式提供AWS凭证。" +
@@ -69,27 +76,7 @@ public class BedrockService {
         
         // 检查是否是 Bedrock API Key 格式
         if (config.getAccessKeyId().startsWith("BedrockAPIKey-")) {
-            System.out.println("检测到 Bedrock API Key 格式");
-        }
-        
-        // 始终使用StaticCredentialsProvider，确保凭证隔离
-        if (config.getSessionToken() != null) {
-            // 使用临时凭证（三个参数）
-            return StaticCredentialsProvider.create(
-                AwsSessionCredentials.create(
-                    config.getAccessKeyId(),
-                    config.getSecretAccessKey(),
-                    config.getSessionToken()
-                )
-            );
-        } else {
-            // 使用永久凭证（两个参数）
-            return StaticCredentialsProvider.create(
-                AwsBasicCredentials.create(
-                    config.getAccessKeyId(),
-                    config.getSecretAccessKey()
-                )
-            );
+            System.out.println("检测到 Bedrock API Key 格式凭证");
         }
     }
 

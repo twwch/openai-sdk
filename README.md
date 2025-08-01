@@ -32,7 +32,7 @@ Add the following dependency to your `pom.xml`:
 <dependency>
     <groupId>io.github.twwch</groupId>
     <artifactId>openai-sdk</artifactId>
-    <version>1.1.11</version>
+    <version>1.1.13</version>
 </dependency>
 ```
 
@@ -86,40 +86,202 @@ public class AzureExample {
 
 ### AWS Bedrock Example
 
+AWS Bedrock支持两种认证方式：标准AWS凭证和Bedrock API Key。
+
+#### 方式1：使用标准AWS凭证（IAM用户）
+
 ```java
 import io.github.twwch.openai.sdk.OpenAI;
+import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
+import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
+import io.github.twwch.openai.sdk.model.chat.ChatMessage;
+import java.util.Arrays;
 
-public class BedrockExample {
+public class BedrockStandardCredentialsExample {
     public static void main(String[] args) {
-        // Configure Bedrock client with explicit credentials (recommended)
+        // 使用标准AWS凭证（Access Key ID + Secret Access Key）
         OpenAI openai = OpenAI.bedrock(
-            "us-east-1",
-            "your-access-key-id",
-            "your-secret-access-key",
-            "anthropic.claude-3-sonnet-20240229"
+            "us-east-1",                              // 区域
+            "AKIAIOSFODNN7EXAMPLE",                   // AWS Access Key ID
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", // AWS Secret Access Key
+            "anthropic.claude-3-sonnet-20240229"      // 模型ID
         );
         
-        // Usage is the same as OpenAI
-        String response = openai.chat("claude", "Tell me about AWS Bedrock");
+        // 简单对话
+        String response = openai.chat("claude", "What is AWS Bedrock?");
         System.out.println(response);
         
-        // With Bedrock API Key format
-        OpenAI openai2 = OpenAI.bedrock(
-            "us-east-1",
-            "BedrockAPIKey-xxx",
-            "your-session-token",
-            "anthropic.claude-3-haiku-20240307"
-        );
-        
-        // Streaming also works
-        openai2.chatStream("claude", "Write a poem", 
+        // 流式对话
+        openai.chatStream("claude", "Write a haiku about cloud computing", 
             chunk -> System.out.print(chunk)
         );
+        
+        // 高级用法 - 完整的请求配置
+        ChatCompletionRequest request = new ChatCompletionRequest();
+        request.setMessages(Arrays.asList(
+            ChatMessage.system("You are a helpful assistant"),
+            ChatMessage.user("Explain quantum computing in simple terms")
+        ));
+        request.setMaxTokens(200);
+        request.setTemperature(0.7);
+        
+        ChatCompletionResponse response2 = openai.createChatCompletion(request);
+        System.out.println(response2.getContent());
     }
 }
 ```
 
-**Important**: AWS Bedrock integration uses credential isolation to prevent conflicts with other AWS services. Always provide explicit credentials for Bedrock. See the [AWS Credential Isolation Guide](AWS_CREDENTIAL_ISOLATION_GUIDE.md) for details.
+#### 方式2：使用Bedrock API Key（推荐）
+
+```java
+import io.github.twwch.openai.sdk.OpenAI;
+import io.github.twwch.openai.sdk.model.chat.*;
+import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
+
+public class BedrockApiKeyExample {
+    public static void main(String[] args) throws InterruptedException {
+        // 使用Bedrock API Key格式的凭证
+        // 这种方式专门为Bedrock设计，避免与其他AWS服务凭证冲突
+        OpenAI openai = OpenAI.bedrock(
+            "us-east-2",                              // 区域
+            "BedrockAPIKey-c1cg-at-448479377682",    // Bedrock API Key
+            "ABSKQmVkcm9ja0FQSS1jMWNnLWF0LTQ0ODQ3OTM3NzY4MgBlYTFmNGE5Yi00YjI3LTRjZDktOGJiYy05NDQ0M2I0OWZmYTY=", // Session Token
+            "anthropic.claude-3-5-sonnet-20240620-v1:0" // 模型ID
+        );
+        
+        // 示例1：简单对话
+        System.out.println("=== 简单对话示例 ===");
+        String response = openai.chat("claude", "你好，请用中文回复");
+        System.out.println(response);
+        
+        // 示例2：带系统提示的对话
+        System.out.println("\n=== 系统提示示例 ===");
+        String response2 = openai.chat("claude", 
+            "你是一个专业的技术文档编写助手", 
+            "请解释什么是微服务架构"
+        );
+        System.out.println(response2);
+        
+        // 示例3：流式响应（实时输出）
+        System.out.println("\n=== 流式响应示例 ===");
+        CountDownLatch latch = new CountDownLatch(1);
+        
+        openai.chatStream("claude", 
+            "写一首关于人工智能的五言绝句", 
+            chunk -> System.out.print(chunk),      // 实时打印每个字符
+            () -> {                                // 完成回调
+                System.out.println("\n[流式响应完成]");
+                latch.countDown();
+            },
+            error -> {                             // 错误处理
+                System.err.println("错误: " + error.getMessage());
+                latch.countDown();
+            }
+        );
+        
+        latch.await(); // 等待流式响应完成
+        
+        // 示例4：高级配置 - 包含token统计
+        System.out.println("\n=== 高级配置示例 ===");
+        ChatCompletionRequest request = new ChatCompletionRequest();
+        request.setMessages(Arrays.asList(
+            ChatMessage.system("你是一个Python编程专家"),
+            ChatMessage.user("写一个快速排序算法")
+        ));
+        request.setMaxTokens(500);
+        request.setTemperature(0.3);  // 降低随机性，让代码更稳定
+        request.setStream(true);      // 启用流式响应
+        
+        StringBuilder fullResponse = new StringBuilder();
+        CountDownLatch latch2 = new CountDownLatch(1);
+        
+        openai.createChatCompletionStream(request,
+            chunk -> {
+                String content = chunk.getContent();
+                if (content != null) {
+                    System.out.print(content);
+                    fullResponse.append(content);
+                }
+                
+                // 检查是否包含使用统计
+                if (chunk.getUsage() != null) {
+                    System.out.println("\n\nToken使用统计:");
+                    System.out.println("- 输入tokens: " + chunk.getUsage().getPromptTokens());
+                    System.out.println("- 输出tokens: " + chunk.getUsage().getCompletionTokens());
+                    System.out.println("- 总计tokens: " + chunk.getUsage().getTotalTokens());
+                }
+            },
+            () -> latch2.countDown(),
+            error -> {
+                error.printStackTrace();
+                latch2.countDown();
+            }
+        );
+        
+        latch2.await();
+        System.out.println("\n响应长度: " + fullResponse.length() + " 字符");
+    }
+}
+```
+
+#### 在Spring Boot项目中使用（处理凭证冲突）
+
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
+import io.github.twwch.openai.sdk.OpenAI;
+
+@Configuration
+public class BedrockConfiguration {
+    
+    // 使用Bedrock API Key，完全隔离其他AWS服务凭证
+    @Bean
+    public OpenAI bedrockClient(
+        @Value("${bedrock.api-key}") String apiKey,
+        @Value("${bedrock.session-token}") String sessionToken,
+        @Value("${bedrock.region:us-east-2}") String region,
+        @Value("${bedrock.model:anthropic.claude-3-5-sonnet-20240620-v1:0}") String model
+    ) {
+        // 即使项目中配置了其他AWS服务（如S3），
+        // Bedrock也会使用这里提供的独立凭证
+        return OpenAI.bedrock(region, apiKey, sessionToken, model);
+    }
+}
+
+// application.yml
+/*
+bedrock:
+  api-key: BedrockAPIKey-c1cg-at-448479377682
+  session-token: ABSKQmVkcm9ja0FQSS1jM...
+  region: us-east-2
+  model: anthropic.claude-3-5-sonnet-20240620-v1:0
+
+# 其他AWS服务配置不会影响Bedrock
+aws:
+  s3:
+    access-key: AKIA...  # S3专用凭证
+    secret-key: ...
+*/
+```
+
+#### 凭证获取方式
+
+1. **标准AWS凭证**：
+   - 登录AWS Console → IAM → Users → Security credentials
+   - 创建Access Key
+   - 需要附加Bedrock相关权限策略
+
+2. **Bedrock API Key**：
+   - 专门为Bedrock设计的认证方式
+   - 提供更好的隔离性，避免与其他AWS服务冲突
+   - 联系AWS获取Bedrock API Key
+
+**重要提示**：
+- 始终使用显式凭证，不要依赖环境变量或IAM角色
+- Bedrock API Key方式可以完全避免凭证冲突问题
+- 详见[AWS凭证隔离指南](AWS_CREDENTIAL_ISOLATION_GUIDE.md)和[Spring Boot集成指南](SPRING_BOOT_INTEGRATION_GUIDE.md)
 
 ### Function Calling (Tool Use)
 
