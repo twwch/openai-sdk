@@ -135,6 +135,7 @@ public class BedrockService {
      * 创建聊天完成
      */
     public ChatCompletionResponse createChatCompletion(ChatCompletionRequest request) throws OpenAIException {
+        String bedrockRequest = null;
         try {
             // 验证和清理请求参数
             BedrockRequestValidator.validateAndCleanRequest(request);
@@ -143,7 +144,7 @@ public class BedrockService {
             String modelId = config.getModelId();
             
             // 转换请求格式
-            String bedrockRequest = modelAdapter.convertRequest(request, objectMapper);
+            bedrockRequest = modelAdapter.convertRequest(request, objectMapper);
             
             // 检查请求大小
             if (bedrockRequest.length() > 100000) {
@@ -166,15 +167,17 @@ public class BedrockService {
             // 转换响应格式
             return modelAdapter.convertResponse(responseBody, request, objectMapper);
             
-        } catch (SdkServiceException e) {
-            logger.error("Bedrock请求失败 - 状态码: {}, 错误代码: {}", 
-                e.statusCode(), e.awsErrorDetails().errorCode());
-            logger.error("请求体: {}", bedrockRequest);
-            logger.error("错误响应: {}", e.awsErrorDetails().errorMessage());
-            throw new OpenAIException("Bedrock请求失败: " + e.getMessage(), e);
         } catch (Exception e) {
             logger.error("Bedrock请求失败", e);
-            logger.error("请求体: {}", bedrockRequest);
+            if (bedrockRequest != null) {
+                logger.error("请求体: {}", bedrockRequest);
+            }
+            // 如果是AWS服务异常，尝试获取更多信息
+            if (e instanceof SdkServiceException) {
+                SdkServiceException sdkException = (SdkServiceException) e;
+                logger.error("状态码: {}", sdkException.statusCode());
+                logger.error("错误消息: {}", sdkException.getMessage());
+            }
             throw new OpenAIException("Bedrock请求失败: " + e.getMessage(), e);
         }
     }
@@ -186,6 +189,7 @@ public class BedrockService {
                                           Consumer<ChatCompletionChunk> onChunk,
                                           Runnable onComplete,
                                           Consumer<Throwable> onError) throws OpenAIException {
+        String bedrockRequest = null;
         try {
             // 验证和清理请求参数
             BedrockRequestValidator.validateAndCleanRequest(request);
@@ -198,7 +202,7 @@ public class BedrockService {
             final List<ChatCompletionRequest.Tool> tools = request.getTools();
             
             // 转换请求格式（流式）
-            String bedrockRequest = modelAdapter.convertStreamRequest(request, objectMapper);
+            bedrockRequest = modelAdapter.convertStreamRequest(request, objectMapper);
             
             // 检查请求大小
             if (bedrockRequest.length() > 100000) {
@@ -245,7 +249,7 @@ public class BedrockService {
                                                 
                                                 List<ChatMessage.ToolCall> toolCalls = new ArrayList<>();
                                                 ChatMessage.ToolCall toolCall = new ChatMessage.ToolCall();
-                                                toolCall.setId("inferred-" + UUID.randomUUID().toString());
+                                                toolCall.setId("inferred-" + UUID.randomUUID());
                                                 toolCall.setType("function");
                                                 
                                                 ChatMessage.ToolCall.Function function = new ChatMessage.ToolCall.Function();
@@ -280,7 +284,6 @@ public class BedrockService {
                     })
                     .onError(throwable -> {
                         logger.error("Bedrock流式请求失败", throwable);
-                        logger.error("请求体: {}", bedrockRequest);
                         if (onError != null) {
                             onError.accept(new OpenAIException("Bedrock流式请求失败: " + throwable.getMessage(), throwable));
                         }
@@ -291,7 +294,9 @@ public class BedrockService {
             
         } catch (Exception e) {
             logger.error("Bedrock流式请求失败", e);
-            logger.error("请求体: {}", bedrockRequest);
+            if (bedrockRequest != null) {
+                logger.error("请求体: {}", bedrockRequest);
+            }
             if (onError != null) {
                 onError.accept(new OpenAIException("Bedrock流式请求失败: " + e.getMessage(), e));
             }
