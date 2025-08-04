@@ -294,7 +294,12 @@ public class BedrockService {
      */
     private String extractToolName(Object toolChoice) {
         if (toolChoice instanceof String) {
-            return (String) toolChoice;
+            String choice = (String) toolChoice;
+            // 忽略特殊的tool_choice值
+            if ("auto".equals(choice) || "none".equals(choice) || "required".equals(choice)) {
+                return null;
+            }
+            return choice;
         } else if (toolChoice instanceof Map) {
             Map<String, Object> tcMap = (Map<String, Object>) toolChoice;
             // OpenAI 格式: {"type": "function", "function": {"name": "tool_name"}}
