@@ -317,11 +317,46 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                 if (chunkNode.has("type")) {
                     String type = chunkNode.get("type").asText();
                     
-                    
-                    if ("content_block_delta".equals(type)) {
+                    if ("content_block_start".equals(type)) {
+                        // 工具调用开始
+                        JsonNode contentBlock = chunkNode.get("content_block");
+                        if (contentBlock != null && "tool_use".equals(contentBlock.get("type").asText())) {
+                            List<ChatMessage.ToolCall> toolCalls = new ArrayList<>();
+                            ChatMessage.ToolCall toolCall = new ChatMessage.ToolCall();
+                            toolCall.setId(contentBlock.get("id").asText());
+                            toolCall.setType("function");
+                            
+                            ChatMessage.ToolCall.Function function = new ChatMessage.ToolCall.Function();
+                            function.setName(contentBlock.get("name").asText());
+                            function.setArguments(""); // 初始为空，后续会通过delta更新
+                            
+                            toolCall.setFunction(function);
+                            toolCalls.add(toolCall);
+                            delta.setToolCalls(toolCalls);
+                        }
+                    } else if ("content_block_delta".equals(type)) {
                         JsonNode deltaNode = chunkNode.get("delta");
-                        if (deltaNode != null && deltaNode.has("text")) {
-                            delta.setContent(deltaNode.get("text").asText());
+                        if (deltaNode != null) {
+                            if (deltaNode.has("text")) {
+                                // 文本内容
+                                delta.setContent(deltaNode.get("text").asText());
+                            } else if (deltaNode.has("partial_json")) {
+                                // 工具调用参数的增量更新
+                                String partialJson = deltaNode.get("partial_json").asText();
+                                if (chunkNode.has("index")) {
+                                    // 创建工具调用增量
+                                    List<ChatMessage.ToolCall> toolCalls = new ArrayList<>();
+                                    ChatMessage.ToolCall toolCall = new ChatMessage.ToolCall();
+                                    toolCall.setIndex(chunkNode.get("index").asInt());
+                                    
+                                    ChatMessage.ToolCall.Function function = new ChatMessage.ToolCall.Function();
+                                    function.setArguments(partialJson);
+                                    
+                                    toolCall.setFunction(function);
+                                    toolCalls.add(toolCall);
+                                    delta.setToolCalls(toolCalls);
+                                }
+                            }
                         }
                     } else if ("message_start".equals(type)) {
                         delta.setRole("assistant");

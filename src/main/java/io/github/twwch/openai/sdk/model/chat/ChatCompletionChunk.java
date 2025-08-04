@@ -120,6 +120,15 @@ public class ChatCompletionChunk {
         public void setLogprobs(Object logprobs) {
             this.logprobs = logprobs;
         }
+
+        public String toString() {
+            return "Choice{" +
+                    "index=" + index +
+                    ", delta=" + delta +
+                    ", finishReason='" + finishReason + '\'' +
+                    ", logprobs=" + logprobs +
+                    '}';
+        }
     }
 
     /**
@@ -167,5 +176,26 @@ public class ChatCompletionChunk {
         public void setFunctionCall(ChatMessage.FunctionCall functionCall) {
             this.functionCall = functionCall;
         }
+
+        @Override
+        public String toString() {
+            return "Delta{" +
+                    "role='" + role + '\'' +
+                    ", content='" + content + '\'' +
+                    ", toolCalls=" + toolCalls +
+                    ", functionCall=" + functionCall +
+                    '}';
+        }
+    }
+
+    public String toString(){
+        return "ChatCompletionChunk{" +
+                "id='" + id + '\'' +
+                ", object='" + object + '\'' +
+                ", created=" + created +
+                ", model='" + model + '\'' +
+                ", choices=" + choices +
+                ", usage=" + usage +
+                '}';
     }
 }
