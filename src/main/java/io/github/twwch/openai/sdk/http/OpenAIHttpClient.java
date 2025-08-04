@@ -173,7 +173,7 @@ public class OpenAIHttpClient {
             
             return responseBody;
         } catch (IOException e) {
-            logger.error("HTTP请求执行失败 - URL: {}, 错误: {}", request.url(), e.getMessage(), e);
+            logger.error("HTTP请求执行失败 - URL: {}, 错误: {}", request.url().toString(), e.getMessage(), e);
             throw new OpenAIException("HTTP请求执行失败: " + e.getMessage(), e);
         }
     }

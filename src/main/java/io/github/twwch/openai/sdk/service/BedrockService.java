@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeAsyncClient;
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClient;
 import software.amazon.awssdk.services.bedrockruntime.model.*;
+import software.amazon.awssdk.core.exception.SdkServiceException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -165,8 +166,15 @@ public class BedrockService {
             // 转换响应格式
             return modelAdapter.convertResponse(responseBody, request, objectMapper);
             
+        } catch (SdkServiceException e) {
+            logger.error("Bedrock请求失败 - 状态码: {}, 错误代码: {}", 
+                e.statusCode(), e.awsErrorDetails().errorCode());
+            logger.error("请求体: {}", bedrockRequest);
+            logger.error("错误响应: {}", e.awsErrorDetails().errorMessage());
+            throw new OpenAIException("Bedrock请求失败: " + e.getMessage(), e);
         } catch (Exception e) {
             logger.error("Bedrock请求失败", e);
+            logger.error("请求体: {}", bedrockRequest);
             throw new OpenAIException("Bedrock请求失败: " + e.getMessage(), e);
         }
     }
@@ -216,7 +224,6 @@ public class BedrockService {
                         if (responseStream instanceof PayloadPart) {
                             PayloadPart payloadPart = (PayloadPart) responseStream;
                             String chunk = payloadPart.bytes().asUtf8String();
-                            
                             
                             try {
                                 // 转换并发送chunk
@@ -273,6 +280,7 @@ public class BedrockService {
                     })
                     .onError(throwable -> {
                         logger.error("Bedrock流式请求失败", throwable);
+                        logger.error("请求体: {}", bedrockRequest);
                         if (onError != null) {
                             onError.accept(new OpenAIException("Bedrock流式请求失败: " + throwable.getMessage(), throwable));
                         }
@@ -283,6 +291,7 @@ public class BedrockService {
             
         } catch (Exception e) {
             logger.error("Bedrock流式请求失败", e);
+            logger.error("请求体: {}", bedrockRequest);
             if (onError != null) {
                 onError.accept(new OpenAIException("Bedrock流式请求失败: " + e.getMessage(), e));
             }

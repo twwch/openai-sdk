@@ -215,7 +215,11 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
             }
             
             bedrockRequest.set("tool_choice", toolChoice);
-            logger.debug("设置 tool_choice: {}", toolChoice);
+            try {
+                logger.debug("设置 tool_choice: {}", objectMapper.writeValueAsString(toolChoice));
+            } catch (Exception e) {
+                logger.debug("设置 tool_choice: [无法序列化]");
+            }
         }
         
         return objectMapper.writeValueAsString(bedrockRequest);
