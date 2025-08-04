@@ -111,7 +111,7 @@ public class BedrockToolsDemo {
             // 设置消息
             List<ChatMessage> messages = new ArrayList<>();
             messages.add(ChatMessage.system(systemPrompt));
-            messages.add(ChatMessage.user("<user_query>成都的天气</user_query>"));
+            messages.add(ChatMessage.user("<user_query>nih</user_query>"));
             request.setMessages(messages);
             
             // 设置其他参数
@@ -125,9 +125,9 @@ public class BedrockToolsDemo {
             Map<String, Object> toolChoice = new HashMap<>();
             toolChoice.put("type", "function");
             Map<String, String> function = new HashMap<>();
-            function.put("name", "get_current_weather");
+            function.put("name", "book-summarizer");
             toolChoice.put("function", function);
-            request.setToolChoice(toolChoice);
+            request.setToolChoice("auto");
             
             // 方式2: 使用字符串（自动选择）
             // request.setToolChoice("auto");
@@ -278,154 +278,154 @@ public class BedrockToolsDemo {
         List<ChatCompletionRequest.Tool> tools = new ArrayList<>();
         
         // 1. video-summarizer
-        tools.add(createTool("video-summarizer", 
-            "Generates concise summaries from uploaded videos or video links. Supports general-purpose summary",
-            new HashMap<>()));
-        
-        // 2. get_current_weather
-        Map<String, Object> weatherParams = new HashMap<>();
-        Map<String, Object> weatherProps = new HashMap<>();
-        weatherProps.put("city", createProperty("string", "The city name must be in English (e.g., 'London', 'New York'). Required."));
-        weatherProps.put("days", createProperty("integer", "Number of days for the forecast (1-5). Use ONLY if the user mentions a specific timeframe like 'next X days'. Defaults to 1.", 1, 5));
-        weatherParams.put("type", "object");
-        weatherParams.put("properties", weatherProps);
-        weatherParams.put("required", Arrays.asList("city"));
-        
-        tools.add(createTool("get_current_weather",
-            "Get the weather forecast for a specified city. Use ONLY if the user explicitly mentions 'weather' and provides a city name(The city name must be in English). The 'days' parameter is optional and should be used ONLY when the user specifies a timeframe (e.g., 'next 3 days'). Default to 1 day if not provided.",
-            weatherParams));
-        
-        // 3. ytb_transcript
-        Map<String, Object> ytbParams = new HashMap<>();
-        Map<String, Object> ytbProps = new HashMap<>();
-        ytbProps.put("video_url", createProperty("string", "Complete URL from supported platforms ONLY. Valid formats:\n- YouTube: https://www.youtube.com/watch?v=... or https://youtu.be/...\n- TED Talks: https://www.ted.com/talks/...\n- Dailymotion: https://www.dailymotion.com/video/...\nURLs from other platforms will be rejected automatically."));
-        ytbParams.put("type", "object");
-        ytbParams.put("properties", ytbProps);
-        ytbParams.put("required", Arrays.asList("video_url"));
-        
-        tools.add(createTool("ytb_transcript",
-            "Extracts accurate text transcripts exclusively from YouTube, TED Talks, and Dailymotion videos. \nDoes not support other platforms, local files, or direct audio uploads.",
-            ytbParams));
-        
-        // 4. ai-flowchart-generator
-        tools.add(createTool("ai-flowchart-generator",
-            "Generates structured Mermaid flowcharts from user-provided processes, ideas, or systems. Supports only valid, logic-based inputs with clear sequential or conditional relationships.",
-            new HashMap<>()));
-        
-        // 5. mp4-to-text
-        tools.add(createTool("mp4-to-text",
-            "Generates transcription, summary, and key point extraction from uploaded MP4 video files. Does not support video URLs or other file formats.",
-            new HashMap<>()));
-        
-        // 6. tiktok-transcript-generator
-        tools.add(createTool("tiktok-transcript-generator",
-            "Extracts and summarizes TikTok video content using timeline markers. Processes TikTok links to identify key information points.",
-            new HashMap<>()));
-        
-        // 7. podcast-summarizer
-        tools.add(createTool("podcast-summarizer",
-            "Extracts spoken content from podcast audio file and generates concise text summaries.",
-            new HashMap<>()));
-        
-        // 8. parser_url
-        Map<String, Object> parserParams = new HashMap<>();
-        Map<String, Object> parserProps = new HashMap<>();
-        parserProps.put("url", createProperty("string", "File URL to parse (non-video platform links only)"));
-        parserProps.put("name", createProperty("string", "Full filename with extension"));
-        parserProps.put("file_type", createEnumProperty(Arrays.asList("pdf", "docx", "txt", "md", "mp3", "mp4", "ppt", "jpg", "png"), "Document format type"));
-        parserParams.put("type", "object");
-        parserParams.put("properties", parserProps);
-        parserParams.put("required", Arrays.asList("url", "name", "file_type"));
-        
-        tools.add(createTool("parser_url",
-            "The disposal PDF file content parser/DOCX/DOC/TXT/MD/MP3 / MP4 / PPT/JPG/PNG file.\nReturn a list of structured data from the parsed content.\nIf the user input is a link, this tool will be directly used for parsing and processing\nAutomatically exclude video platforms: YouTube/TED/Dailymotion - Use dedicated tools.\nWhen the file already contains file content, this tool is not called to repeat the parsing",
-            parserParams));
-        
-        // 9. read_file_full_content
-        Map<String, Object> readFullParams = new HashMap<>();
-        Map<String, Object> readFullProps = new HashMap<>();
-        readFullProps.put("file_url", createProperty("string", "The id of the file"));
-        readFullParams.put("type", "object");
-        readFullParams.put("properties", readFullProps);
-        readFullParams.put("required", Arrays.asList("file_url"));
-        
-        tools.add(createTool("read_file_full_content",
-            "A tool for analyzing ** all ** knowledge content within a file or multiple files. \nNotice: ​​This tool consumes a significant amount of tokens per use. Only be invoked when the user explicitly requires full article content extraction. Any other usage situation is strictly prohibited.​",
-            readFullParams));
-        
-        // 10. ai-homework-helper
-        tools.add(createTool("ai-homework-helper",
-            "Solves academic questions across subjects. Use only when the input contains a clear question requiring step-by-step explanation or calculation. Not for casual chat or general advice.",
-            new HashMap<>()));
-        
-        // 11. search_knowledge
-        Map<String, Object> searchParams = new HashMap<>();
-        Map<String, Object> searchProps = new HashMap<>();
-        searchProps.put("user_question", createProperty("string", "A non-URL, logically structured question requiring domain expertise or knowledge references (e.g., 'Explain quantum computing principles from my notes'). Must NOT be a greeting."));
-        searchParams.put("type", "object");
-        searchParams.put("properties", searchProps);
-        searchParams.put("required", Arrays.asList("user_question"));
-        
-        tools.add(createTool("search_knowledge",
-            "Search the user's knowledge base to answer complex, domain-specific questions requiring contextual understanding. DO NOT use if: 1. The input contains URLs, 2. The question is a greeting/simple chat (e.g., 'Hello', 'How are you?'), 3. The question is trivial and needs no prior knowledge.",
-            searchParams));
-        
-        // 12-36: 简化的工具定义
-        tools.add(createTool("true-or-false-generator", "Creates binary assessment questions from provided content. Produces evaluation materials with definitive answers based on source information.", new HashMap<>()));
-        tools.add(createTool("ai-story-generator", "Creates narrative content based on user specifications. Produces fictional tales with character development and plot structures.", new HashMap<>()));
-        tools.add(createTool("ai-chart-maker", "Generates data visualizations from user-provided information. Creates various chart types for information representation.", new HashMap<>()));
-        tools.add(createTool("terms-of-service-analyzer", "Evaluates legal agreements for key provisions and implications. Interprets complex terms of service documents with legally relevant insights.", new HashMap<>()));
-        tools.add(createTool("ai-quiz-generator", "Produces knowledge-testing questions from uploaded content. Creates assessment materials with questions and answers.", new HashMap<>()));
-        tools.add(createTool("ai-website-summarizer", "Creates content overviews from webpage URLs. Extracts essential information from websites into structured summaries.", new HashMap<>()));
-        tools.add(createTool("audio-to-text-converter", "Transcribes spoken content from audio files into text format. Processes various audio inputs for accurate text conversion.", new HashMap<>()));
-        tools.add(createTool("ai-notes-generator", "Transforms content into structured notes with logical organization. Extracts and formats key information from various inputs.", new HashMap<>()));
-        tools.add(createTool("youtube-transcript-generator", "Develops video scripts for YouTube based on content requirements. Creates professional narratives with specified topic, audience, and duration parameters.", new HashMap<>()));
-        tools.add(createTool("ai-question-generator", "Creates open-ended questions from content sources. Produces discussion prompts focused on key topics in provided materials.", new HashMap<>()));
-        tools.add(createTool("relationship-chart-maker", "Generates professional relationship diagrams from user-provided data. Visualizes connections, hierarchies, and network structures based on input information.", new HashMap<>()));
-        tools.add(createTool("ai-document-summarizer", "Extracts key points from various document types. Condenses content into structured summaries with main concepts highlighted.", new HashMap<>()));
-        tools.add(createTool("ai-study-guide-maker", "Simply enter any study topic or upload your learning materials, and I'll generate a scientifically structured study guide to boost your learning efficiency!", new HashMap<>()));
-        tools.add(createTool("ai-audio-summarizer", "Creates text summaries from meeting, lecture, or conversation recordings. Converts spoken content into structured text highlights.", new HashMap<>()));
-        tools.add(createTool("ai-report-writer", "Develops professional research documents from industry information. Creates analytical reports with market insights and trend evaluations.", new HashMap<>()));
-        tools.add(createTool("job-description-generator", "Creates precise position descriptions based on role requirements. Produces professional job listings with responsibilities and qualifications.", new HashMap<>()));
-        tools.add(createTool("ai-argument-generator", "Develops multi-perspective arguments for debate topics or theses. Provides logical reasoning supported by data points.", new HashMap<>()));
-        tools.add(createTool("free-ai-text-humanizer", "Transforms AI-generated content into natural-sounding text. Removes artificial patterns and adds linguistic variation for human-like writing quality.", new HashMap<>()));
-        tools.add(createTool("ai-youtube-name-generator", "Creates unique YouTube channel names based on content themes and branding preferences. Generates memorable and relevant naming options.", new HashMap<>()));
-        tools.add(createTool("ai-pdf-to-markdown-converter", "Converts PDF files into Markdown format. Use only for PDF input", new HashMap<>()));
-        tools.add(createTool("er-diagram-generator", "Generates Entity-Relationship diagrams based on user-provided database structures or entity descriptions.", new HashMap<>()));
-        tools.add(createTool("ai-rap-lyrics-generator", "Creates custom rap lyrics in various styles (Trap, Old School, Freestyle). Produces rhyming verses based on user-provided themes.", new HashMap<>()));
-        tools.add(createTool("youtube-video-summarizer", "Summarizes video content with timeline markers using transcript data. Must execute after ytb_transcript tool. Cannot function independently without transcript input.", new HashMap<>()));
+//        tools.add(createTool("video-summarizer",
+//            "Generates concise summaries from uploaded videos or video links. Supports general-purpose summary",
+//            new HashMap<>()));
+//
+//        // 2. get_current_weather
+//        Map<String, Object> weatherParams = new HashMap<>();
+//        Map<String, Object> weatherProps = new HashMap<>();
+//        weatherProps.put("city", createProperty("string", "The city name must be in English (e.g., 'London', 'New York'). Required."));
+//        weatherProps.put("days", createProperty("integer", "Number of days for the forecast (1-5). Use ONLY if the user mentions a specific timeframe like 'next X days'. Defaults to 1.", 1, 5));
+//        weatherParams.put("type", "object");
+//        weatherParams.put("properties", weatherProps);
+//        weatherParams.put("required", Arrays.asList("city"));
+//
+//        tools.add(createTool("get_current_weather",
+//            "Get the weather forecast for a specified city. Use ONLY if the user explicitly mentions 'weather' and provides a city name(The city name must be in English). The 'days' parameter is optional and should be used ONLY when the user specifies a timeframe (e.g., 'next 3 days'). Default to 1 day if not provided.",
+//            weatherParams));
+//
+//        // 3. ytb_transcript
+//        Map<String, Object> ytbParams = new HashMap<>();
+//        Map<String, Object> ytbProps = new HashMap<>();
+//        ytbProps.put("video_url", createProperty("string", "Complete URL from supported platforms ONLY. Valid formats:\n- YouTube: https://www.youtube.com/watch?v=... or https://youtu.be/...\n- TED Talks: https://www.ted.com/talks/...\n- Dailymotion: https://www.dailymotion.com/video/...\nURLs from other platforms will be rejected automatically."));
+//        ytbParams.put("type", "object");
+//        ytbParams.put("properties", ytbProps);
+//        ytbParams.put("required", Arrays.asList("video_url"));
+//
+//        tools.add(createTool("ytb_transcript",
+//            "Extracts accurate text transcripts exclusively from YouTube, TED Talks, and Dailymotion videos. \nDoes not support other platforms, local files, or direct audio uploads.",
+//            ytbParams));
+//
+//        // 4. ai-flowchart-generator
+//        tools.add(createTool("ai-flowchart-generator",
+//            "Generates structured Mermaid flowcharts from user-provided processes, ideas, or systems. Supports only valid, logic-based inputs with clear sequential or conditional relationships.",
+//            new HashMap<>()));
+//
+//        // 5. mp4-to-text
+//        tools.add(createTool("mp4-to-text",
+//            "Generates transcription, summary, and key point extraction from uploaded MP4 video files. Does not support video URLs or other file formats.",
+//            new HashMap<>()));
+//
+//        // 6. tiktok-transcript-generator
+//        tools.add(createTool("tiktok-transcript-generator",
+//            "Extracts and summarizes TikTok video content using timeline markers. Processes TikTok links to identify key information points.",
+//            new HashMap<>()));
+//
+//        // 7. podcast-summarizer
+//        tools.add(createTool("podcast-summarizer",
+//            "Extracts spoken content from podcast audio file and generates concise text summaries.",
+//            new HashMap<>()));
+//
+//        // 8. parser_url
+//        Map<String, Object> parserParams = new HashMap<>();
+//        Map<String, Object> parserProps = new HashMap<>();
+//        parserProps.put("url", createProperty("string", "File URL to parse (non-video platform links only)"));
+//        parserProps.put("name", createProperty("string", "Full filename with extension"));
+//        parserProps.put("file_type", createEnumProperty(Arrays.asList("pdf", "docx", "txt", "md", "mp3", "mp4", "ppt", "jpg", "png"), "Document format type"));
+//        parserParams.put("type", "object");
+//        parserParams.put("properties", parserProps);
+//        parserParams.put("required", Arrays.asList("url", "name", "file_type"));
+//
+//        tools.add(createTool("parser_url",
+//            "The disposal PDF file content parser/DOCX/DOC/TXT/MD/MP3 / MP4 / PPT/JPG/PNG file.\nReturn a list of structured data from the parsed content.\nIf the user input is a link, this tool will be directly used for parsing and processing\nAutomatically exclude video platforms: YouTube/TED/Dailymotion - Use dedicated tools.\nWhen the file already contains file content, this tool is not called to repeat the parsing",
+//            parserParams));
+//
+//        // 9. read_file_full_content
+//        Map<String, Object> readFullParams = new HashMap<>();
+//        Map<String, Object> readFullProps = new HashMap<>();
+//        readFullProps.put("file_url", createProperty("string", "The id of the file"));
+//        readFullParams.put("type", "object");
+//        readFullParams.put("properties", readFullProps);
+//        readFullParams.put("required", Arrays.asList("file_url"));
+//
+//        tools.add(createTool("read_file_full_content",
+//            "A tool for analyzing ** all ** knowledge content within a file or multiple files. \nNotice: ​​This tool consumes a significant amount of tokens per use. Only be invoked when the user explicitly requires full article content extraction. Any other usage situation is strictly prohibited.​",
+//            readFullParams));
+//
+//        // 10. ai-homework-helper
+//        tools.add(createTool("ai-homework-helper",
+//            "Solves academic questions across subjects. Use only when the input contains a clear question requiring step-by-step explanation or calculation. Not for casual chat or general advice.",
+//            new HashMap<>()));
+//
+//        // 11. search_knowledge
+//        Map<String, Object> searchParams = new HashMap<>();
+//        Map<String, Object> searchProps = new HashMap<>();
+//        searchProps.put("user_question", createProperty("string", "A non-URL, logically structured question requiring domain expertise or knowledge references (e.g., 'Explain quantum computing principles from my notes'). Must NOT be a greeting."));
+//        searchParams.put("type", "object");
+//        searchParams.put("properties", searchProps);
+//        searchParams.put("required", Arrays.asList("user_question"));
+//
+//        tools.add(createTool("search_knowledge",
+//            "Search the user's knowledge base to answer complex, domain-specific questions requiring contextual understanding. DO NOT use if: 1. The input contains URLs, 2. The question is a greeting/simple chat (e.g., 'Hello', 'How are you?'), 3. The question is trivial and needs no prior knowledge.",
+//            searchParams));
+//
+//        // 12-36: 简化的工具定义
+//        tools.add(createTool("true-or-false-generator", "Creates binary assessment questions from provided content. Produces evaluation materials with definitive answers based on source information.", new HashMap<>()));
+//        tools.add(createTool("ai-story-generator", "Creates narrative content based on user specifications. Produces fictional tales with character development and plot structures.", new HashMap<>()));
+//        tools.add(createTool("ai-chart-maker", "Generates data visualizations from user-provided information. Creates various chart types for information representation.", new HashMap<>()));
+//        tools.add(createTool("terms-of-service-analyzer", "Evaluates legal agreements for key provisions and implications. Interprets complex terms of service documents with legally relevant insights.", new HashMap<>()));
+//        tools.add(createTool("ai-quiz-generator", "Produces knowledge-testing questions from uploaded content. Creates assessment materials with questions and answers.", new HashMap<>()));
+//        tools.add(createTool("ai-website-summarizer", "Creates content overviews from webpage URLs. Extracts essential information from websites into structured summaries.", new HashMap<>()));
+//        tools.add(createTool("audio-to-text-converter", "Transcribes spoken content from audio files into text format. Processes various audio inputs for accurate text conversion.", new HashMap<>()));
+//        tools.add(createTool("ai-notes-generator", "Transforms content into structured notes with logical organization. Extracts and formats key information from various inputs.", new HashMap<>()));
+//        tools.add(createTool("youtube-transcript-generator", "Develops video scripts for YouTube based on content requirements. Creates professional narratives with specified topic, audience, and duration parameters.", new HashMap<>()));
+//        tools.add(createTool("ai-question-generator", "Creates open-ended questions from content sources. Produces discussion prompts focused on key topics in provided materials.", new HashMap<>()));
+//        tools.add(createTool("relationship-chart-maker", "Generates professional relationship diagrams from user-provided data. Visualizes connections, hierarchies, and network structures based on input information.", new HashMap<>()));
+//        tools.add(createTool("ai-document-summarizer", "Extracts key points from various document types. Condenses content into structured summaries with main concepts highlighted.", new HashMap<>()));
+//        tools.add(createTool("ai-study-guide-maker", "Simply enter any study topic or upload your learning materials, and I'll generate a scientifically structured study guide to boost your learning efficiency!", new HashMap<>()));
+//        tools.add(createTool("ai-audio-summarizer", "Creates text summaries from meeting, lecture, or conversation recordings. Converts spoken content into structured text highlights.", new HashMap<>()));
+//        tools.add(createTool("ai-report-writer", "Develops professional research documents from industry information. Creates analytical reports with market insights and trend evaluations.", new HashMap<>()));
+//        tools.add(createTool("job-description-generator", "Creates precise position descriptions based on role requirements. Produces professional job listings with responsibilities and qualifications.", new HashMap<>()));
+//        tools.add(createTool("ai-argument-generator", "Develops multi-perspective arguments for debate topics or theses. Provides logical reasoning supported by data points.", new HashMap<>()));
+//        tools.add(createTool("free-ai-text-humanizer", "Transforms AI-generated content into natural-sounding text. Removes artificial patterns and adds linguistic variation for human-like writing quality.", new HashMap<>()));
+//        tools.add(createTool("ai-youtube-name-generator", "Creates unique YouTube channel names based on content themes and branding preferences. Generates memorable and relevant naming options.", new HashMap<>()));
+//        tools.add(createTool("ai-pdf-to-markdown-converter", "Converts PDF files into Markdown format. Use only for PDF input", new HashMap<>()));
+//        tools.add(createTool("er-diagram-generator", "Generates Entity-Relationship diagrams based on user-provided database structures or entity descriptions.", new HashMap<>()));
+//        tools.add(createTool("ai-rap-lyrics-generator", "Creates custom rap lyrics in various styles (Trap, Old School, Freestyle). Produces rhyming verses based on user-provided themes.", new HashMap<>()));
+//        tools.add(createTool("youtube-video-summarizer", "Summarizes video content with timeline markers using transcript data. Must execute after ytb_transcript tool. Cannot function independently without transcript input.", new HashMap<>()));
         tools.add(createTool("book-summarizer", "Creates condensed versions of book content from documents or links. Extracts key themes, arguments, and conclusions from long-form texts.", new HashMap<>()));
         
         // 37. generate_mind_map
-        Map<String, Object> mindMapParams = new HashMap<>();
-        Map<String, Object> mindMapProps = new HashMap<>();
-        mindMapProps.put("user_instruction", createProperty("string", "A clear instruction to generate a mind map, specifying the content focus in any language (e.g., 'Create a mind map about marketing strategies', '生成一份关于营销策略的思维导图'). The instruction must be specific and not ambiguous."));
-        mindMapParams.put("type", "object");
-        mindMapParams.put("properties", mindMapProps);
-        mindMapParams.put("required", Arrays.asList("user_instruction"));
-        
-        tools.add(createTool("generate_mind_map",
-            "Generate a mind map ONLY when the user explicitly requests a mind map (e.g., '思维导图', 'mind map', 'esquema mental', etc.) and provides valid knowledge IDs. This tool is NOT for generic summarization or note-taking. If the mind map content has already been generated, it is not allowed to be called again",
-            mindMapParams));
-        
-        // 38-40: 最后几个工具
-        tools.add(createTool("ai-image-summarizer", "A tool for summarizing all useful information from an image or multiple images, including jpg, jpeg, png and other image format. Returns a structured, human-readable summary of image contents.", new HashMap<>()));
-        tools.add(createTool("ai-handwriting-recognition", "Extracts text from handwritten image uploads. Converts handwritten content to digital text format.", new HashMap<>()));
-        tools.add(createTool("instagram-name-generator", "Generates unique Instagram usernames based on account purpose, preferred nicknames, or keywords. Creates distinctive social media identifiers tailored to user preferences.", new HashMap<>()));
+//        Map<String, Object> mindMapParams = new HashMap<>();
+//        Map<String, Object> mindMapProps = new HashMap<>();
+//        mindMapProps.put("user_instruction", createProperty("string", "A clear instruction to generate a mind map, specifying the content focus in any language (e.g., 'Create a mind map about marketing strategies', '生成一份关于营销策略的思维导图'). The instruction must be specific and not ambiguous."));
+//        mindMapParams.put("type", "object");
+//        mindMapParams.put("properties", mindMapProps);
+//        mindMapParams.put("required", Arrays.asList("user_instruction"));
+//
+//        tools.add(createTool("generate_mind_map",
+//            "Generate a mind map ONLY when the user explicitly requests a mind map (e.g., '思维导图', 'mind map', 'esquema mental', etc.) and provides valid knowledge IDs. This tool is NOT for generic summarization or note-taking. If the mind map content has already been generated, it is not allowed to be called again",
+//            mindMapParams));
+//
+//        // 38-40: 最后几个工具
+//        tools.add(createTool("ai-image-summarizer", "A tool for summarizing all useful information from an image or multiple images, including jpg, jpeg, png and other image format. Returns a structured, human-readable summary of image contents.", new HashMap<>()));
+//        tools.add(createTool("ai-handwriting-recognition", "Extracts text from handwritten image uploads. Converts handwritten content to digital text format.", new HashMap<>()));
+//        tools.add(createTool("instagram-name-generator", "Generates unique Instagram usernames based on account purpose, preferred nicknames, or keywords. Creates distinctive social media identifiers tailored to user preferences.", new HashMap<>()));
         
         // 41. read_file_chunk_content
-        Map<String, Object> readChunkParams = new HashMap<>();
-        Map<String, Object> readChunkProps = new HashMap<>();
-        readChunkProps.put("file_url", createProperty("string", "The id of the file"));
-        readChunkProps.put("start_index", createProperty("number", "Read the index number at the start. The maximum length per segment is 40,000 characters; Minimum length per segment is 30000 characters, ** not page number but subscript of text character content **"));
-        readChunkProps.put("end_index", createProperty("number", "Read the index number at the end. The maximum length per segment is 40,000 characters; Minimum length per segment is 30000 characters, ** not page number but subscript of text character content **"));
-        readChunkParams.put("type", "object");
-        readChunkParams.put("properties", readChunkProps);
-        readChunkParams.put("required", Arrays.asList("start_index", "end_index", "file_url"));
-        
-        tools.add(createTool("read_file_chunk_content",
-            "A tool for analyzing knowledge content within a file or multiple files in segments rather than analyzing the entire content at once. ​​When existing reference information cannot resolve the user's issue​​, this tool can be used to progressively read file content until the extracted text can sufficiently address the user's query. \n\nCritical specifications:\n1. Indexing Rules​​: start_index and end_index represent zero-based character positions in the text content, ​​not page numbers​​.\n​​2. Reading Scope​​:\n- Minimum length per segment: 30000 characters.\n- Maximum length per segment: 40000 characters.\n​​3. Termination Condition​​: Reading must cease immediately upon obtaining content that resolves the user's problem.",
-            readChunkParams));
+//        Map<String, Object> readChunkParams = new HashMap<>();
+//        Map<String, Object> readChunkProps = new HashMap<>();
+//        readChunkProps.put("file_url", createProperty("string", "The id of the file"));
+//        readChunkProps.put("start_index", createProperty("number", "Read the index number at the start. The maximum length per segment is 40,000 characters; Minimum length per segment is 30000 characters, ** not page number but subscript of text character content **"));
+//        readChunkProps.put("end_index", createProperty("number", "Read the index number at the end. The maximum length per segment is 40,000 characters; Minimum length per segment is 30000 characters, ** not page number but subscript of text character content **"));
+//        readChunkParams.put("type", "object");
+//        readChunkParams.put("properties", readChunkProps);
+//        readChunkParams.put("required", Arrays.asList("start_index", "end_index", "file_url"));
+//
+//        tools.add(createTool("read_file_chunk_content",
+//            "A tool for analyzing knowledge content within a file or multiple files in segments rather than analyzing the entire content at once. ​​When existing reference information cannot resolve the user's issue​​, this tool can be used to progressively read file content until the extracted text can sufficiently address the user's query. \n\nCritical specifications:\n1. Indexing Rules​​: start_index and end_index represent zero-based character positions in the text content, ​​not page numbers​​.\n​​2. Reading Scope​​:\n- Minimum length per segment: 30000 characters.\n- Maximum length per segment: 40000 characters.\n​​3. Termination Condition​​: Reading must cease immediately upon obtaining content that resolves the user's problem.",
+//            readChunkParams));
         
         return tools;
     }

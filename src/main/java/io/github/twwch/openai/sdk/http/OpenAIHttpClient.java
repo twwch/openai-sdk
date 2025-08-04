@@ -10,6 +10,8 @@ import okhttp3.*;
 import okhttp3.sse.EventSource;
 import okhttp3.sse.EventSourceListener;
 import okhttp3.sse.EventSources;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -18,6 +20,8 @@ import java.util.concurrent.TimeUnit;
  * OpenAI HTTP客户端
  */
 public class OpenAIHttpClient {
+    private static final Logger logger = LoggerFactory.getLogger(OpenAIHttpClient.class);
+    
     private final OkHttpClient client;
     private final OpenAIConfig config;
     private final ObjectMapper objectMapper;
@@ -80,6 +84,7 @@ public class OpenAIHttpClient {
                     .post(requestBody)
                     .build(), jsonBody);
         } catch (JsonProcessingException e) {
+            logger.error("序列化请求体失败: {}", endpoint, e);
             throw new OpenAIException("无法序列化请求体", e);
         }
     }
@@ -168,6 +173,7 @@ public class OpenAIHttpClient {
             
             return responseBody;
         } catch (IOException e) {
+            logger.error("HTTP请求执行失败 - URL: {}, 错误: {}", request.url(), e.getMessage(), e);
             throw new OpenAIException("HTTP请求执行失败: " + e.getMessage(), e);
         }
     }
@@ -186,15 +192,12 @@ public class OpenAIHttpClient {
         String errorType = null;
         String errorCode = null;
 
-        // 打印详细的错误信息到控制台
-        System.err.println("=== OpenAI API 错误详情 ===");
-        System.err.println("状态码: " + statusCode);
-        System.err.println("请求URL: " + url);
+        // 记录详细的错误信息
+        logger.error("OpenAI API 错误 - 状态码: {}, URL: {}", statusCode, url);
         if (requestBody != null) {
-            System.err.println("请求参数: " + requestBody);
+            logger.debug("请求参数: {}", requestBody);
         }
-        System.err.println("错误响应: " + responseBody);
-        System.err.println("========================");
+        logger.error("错误响应: {}", responseBody);
 
         try {
             JsonNode errorJson = objectMapper.readTree(responseBody);
@@ -212,6 +215,7 @@ public class OpenAIHttpClient {
             }
         } catch (Exception e) {
             // 如果解析失败，使用默认错误消息
+            logger.debug("解析错误响应失败: {}", responseBody, e);
         }
 
         // 如果是400错误且涉及tools，添加特殊提示
@@ -265,6 +269,7 @@ public class OpenAIHttpClient {
             return factory.newEventSource(request, listener);
             
         } catch (JsonProcessingException e) {
+            logger.error("序列化流式请求体失败: {}", endpoint, e);
             throw new OpenAIException("无法序列化请求体", e);
         }
     }

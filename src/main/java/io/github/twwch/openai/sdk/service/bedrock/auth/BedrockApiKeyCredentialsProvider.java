@@ -4,12 +4,15 @@ import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Bedrock API Key专用凭证提供者
  * 完全绕过AWS SDK的默认凭证链，强制使用提供的API Key
  */
 public class BedrockApiKeyCredentialsProvider implements AwsCredentialsProvider {
+    private static final Logger logger = LoggerFactory.getLogger(BedrockApiKeyCredentialsProvider.class);
     
     private final String apiKey;
     private final String apiSecret;
@@ -42,7 +45,7 @@ public class BedrockApiKeyCredentialsProvider implements AwsCredentialsProvider 
         this.isApiKeyFormat = apiKey.startsWith("BedrockAPIKey-");
         
         if (isApiKeyFormat) {
-            System.out.println("检测到Bedrock API Key格式凭证");
+            logger.debug("检测到Bedrock API Key格式凭证");
         }
     }
     

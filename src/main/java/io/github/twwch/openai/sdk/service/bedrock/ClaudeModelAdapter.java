@@ -8,6 +8,8 @@ import io.github.twwch.openai.sdk.model.chat.ChatCompletionChunk;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
 import io.github.twwch.openai.sdk.model.chat.ChatMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +20,7 @@ import java.util.UUID;
  * Claude模型适配器
  */
 public class ClaudeModelAdapter implements BedrockModelAdapter {
+    private static final Logger logger = LoggerFactory.getLogger(ClaudeModelAdapter.class);
     
     @Override
     public boolean supports(String modelId) {
@@ -166,7 +169,7 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
             
             if (bedrockTools.size() > 0) {
                 bedrockRequest.set("tools", bedrockTools);
-                System.out.println("添加了 " + bedrockTools.size() + " 个工具到请求中");
+                logger.debug("添加了 {} 个工具到请求中", bedrockTools.size());
             }
         }
         
@@ -212,7 +215,7 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
             }
             
             bedrockRequest.set("tool_choice", toolChoice);
-            System.out.println("设置 tool_choice: " + toolChoice.toString());
+            logger.debug("设置 tool_choice: {}", toolChoice);
         }
         
         return objectMapper.writeValueAsString(bedrockRequest);
@@ -329,6 +332,7 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
             try {
                 JsonNode chunkNode = objectMapper.readTree(line);
                 
+                
                 ChatCompletionChunk completionChunk = new ChatCompletionChunk();
                 completionChunk.setId("chatcmpl-" + UUID.randomUUID().toString());
                 completionChunk.setObject("chat.completion.chunk");
@@ -344,6 +348,7 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                 // 处理不同类型的事件
                 if (chunkNode.has("type")) {
                     String type = chunkNode.get("type").asText();
+                    
                     
                     if ("content_block_start".equals(type)) {
                         // 工具调用开始
@@ -386,20 +391,56 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                                 }
                             }
                         }
+                    } else if ("content_block_stop".equals(type)) {
+                        // 内容块结束事件
                     } else if ("message_start".equals(type)) {
                         delta.setRole("assistant");
-                        // 检查是否有usage信息
-                        if (chunkNode.has("message") && chunkNode.get("message").has("usage")) {
-                            JsonNode usageNode = chunkNode.get("message").get("usage");
-                            ChatCompletionResponse.Usage usage = new ChatCompletionResponse.Usage();
-                            if (usageNode.has("input_tokens")) {
-                                usage.setPromptTokens(usageNode.get("input_tokens").asInt());
+                        
+                        
+                        // 检查 message 对象中的所有内容
+                        if (chunkNode.has("message")) {
+                            JsonNode messageNode = chunkNode.get("message");
+                            
+                            // 检查是否有usage信息
+                            if (messageNode.has("usage")) {
+                                JsonNode usageNode = messageNode.get("usage");
+                                ChatCompletionResponse.Usage usage = new ChatCompletionResponse.Usage();
+                                if (usageNode.has("input_tokens")) {
+                                    usage.setPromptTokens(usageNode.get("input_tokens").asInt());
+                                }
+                                if (usageNode.has("output_tokens")) {
+                                    usage.setCompletionTokens(usageNode.get("output_tokens").asInt());
+                                }
+                                usage.setTotalTokens(usage.getPromptTokens() + usage.getCompletionTokens());
+                                completionChunk.setUsage(usage);
                             }
-                            if (usageNode.has("output_tokens")) {
-                                usage.setCompletionTokens(usageNode.get("output_tokens").asInt());
+                            
+                            // 检查是否有 content 数组（可能包含工具调用）
+                            if (messageNode.has("content") && messageNode.get("content").isArray()) {
+                                ArrayNode contentArray = (ArrayNode) messageNode.get("content");
+                                List<ChatMessage.ToolCall> toolCalls = new ArrayList<>();
+                                
+                                for (JsonNode contentItem : contentArray) {
+                                    if (contentItem.has("type") && "tool_use".equals(contentItem.get("type").asText())) {
+                                        ChatMessage.ToolCall toolCall = new ChatMessage.ToolCall();
+                                        toolCall.setId(contentItem.get("id").asText());
+                                        toolCall.setType("function");
+                                        
+                                        ChatMessage.ToolCall.Function function = new ChatMessage.ToolCall.Function();
+                                        function.setName(contentItem.get("name").asText());
+                                        
+                                        // 初始参数为空，后续通过 content_block_delta 更新
+                                        function.setArguments("");
+                                        
+                                        toolCall.setFunction(function);
+                                        toolCalls.add(toolCall);
+                                    }
+                                }
+                                
+                                if (!toolCalls.isEmpty()) {
+                                    delta.setToolCalls(toolCalls);
+                                }
                             }
-                            usage.setTotalTokens(usage.getPromptTokens() + usage.getCompletionTokens());
-                            completionChunk.setUsage(usage);
                         }
                     } else if ("message_stop".equals(type)) {
                         choice.setFinishReason("stop");
@@ -437,7 +478,7 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                 chunks.add(completionChunk);
                 
             } catch (Exception e) {
-                // 忽略解析错误的行
+                logger.debug("忽略无法解析的流式事件行: {}", line, e);
             }
         }
         

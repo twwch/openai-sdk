@@ -15,6 +15,8 @@ import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
 import okhttp3.sse.EventSource;
 import okhttp3.sse.EventSourceListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -26,6 +28,8 @@ import java.util.function.Consumer;
  * OpenAI服务类
  */
 public class OpenAIService {
+    private static final Logger logger = LoggerFactory.getLogger(OpenAIService.class);
+    
     private final OpenAIHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final OpenAIConfig config;
@@ -82,6 +86,7 @@ public class OpenAIService {
                 return result.get("data");
             }
         } catch (JsonProcessingException e) {
+            logger.error("解析模型列表响应失败: {}", response, e);
             throw new OpenAIException("无法解析模型列表响应", e);
         }
     }
@@ -102,6 +107,7 @@ public class OpenAIService {
         try {
             return objectMapper.readValue(response, ModelInfo.class);
         } catch (JsonProcessingException e) {
+            logger.error("解析模型详情响应失败 - 模型ID: {}, 响应: {}", modelId, response, e);
             throw new OpenAIException("无法解析模型详情响应", e);
         }
     }
@@ -128,6 +134,7 @@ public class OpenAIService {
         try {
             return objectMapper.readValue(response, ChatCompletionResponse.class);
         } catch (JsonProcessingException e) {
+            logger.error("解析聊天完成响应失败 - 模型: {}, 响应: {}", request.getModel(), response, e);
             throw new OpenAIException("无法解析聊天完成响应", e);
         }
     }
@@ -178,15 +185,14 @@ public class OpenAIService {
                             errorMessage += " - " + response.message();
                         }
                         
-                        // 打印请求详情以便调试
-                        System.err.println("=== OpenAI API 流式请求错误 ===");
-                        System.err.println("状态码: " + response.code());
-                        System.err.println("请求URL: " + response.request().url());
+                        // 记录错误详情
+                        logger.error("OpenAI API 流式请求错误 - 状态码: {}, URL: {}", 
+                            response.code(), response.request().url());
                         try {
                             String requestJson = objectMapper.writeValueAsString(request);
-                            System.err.println("请求参数: " + requestJson);
+                            logger.debug("请求参数: {}", requestJson);
                         } catch (JsonProcessingException je) {
-                            System.err.println("请求参数: [无法序列化]");
+                            logger.debug("请求参数: [无法序列化]", je);
                         }
                         
                         // 尝试读取响应体获取更多错误信息
@@ -194,14 +200,13 @@ public class OpenAIService {
                             if (response.body() != null) {
                                 String body = response.body().string();
                                 if (!body.isEmpty()) {
-                                    System.err.println("错误响应: " + body);
+                                    logger.error("错误响应: {}", body);
                                     errorMessage += " - " + body;
                                 }
                             }
                         } catch (IOException e) {
                             // 忽略读取错误
                         }
-                        System.err.println("========================");
                         
                         onError.accept(new OpenAIException(errorMessage));
                     }
@@ -228,6 +233,7 @@ public class OpenAIService {
                 } catch (JsonProcessingException e) {
                     isDone = true;
                     eventSource.cancel(); // 出错时关闭连接
+                    logger.error("解析流式响应失败: {}", data, e);
                     if (onError != null) {
                         onError.accept(new OpenAIException("无法解析流式响应: " + data, e));
                     }
@@ -260,21 +266,16 @@ public class OpenAIService {
                                 errorMessage += " - " + response.message();
                             }
                             
-                            // 打印请求详情以便调试
-                            System.err.println("=== OpenAI API 流式请求失败 ===");
-                            System.err.println("状态码: " + response.code());
-                            System.err.println("请求URL: " + response.request().url());
+                            // 记录错误详情
+                            logger.error("OpenAI API 流式请求失败 - 状态码: {}, URL: {}", 
+                                response.code(), response.request().url(), t);
                             try {
                                 String requestJson = objectMapper.writeValueAsString(request);
-                                System.err.println("请求参数: " + requestJson);
+                                logger.debug("请求参数: {}", requestJson);
                             } catch (JsonProcessingException je) {
-                                System.err.println("请求参数: [无法序列化]");
+                                logger.debug("请求参数: [无法序列化]", je);
                             }
-                            if (t != null) {
-                                System.err.println("错误: " + t.getMessage());
                             }
-                            System.err.println("========================");
-                        }
                         if (t != null && t.getMessage() != null) {
                             errorMessage += ": " + t.getMessage();
                         }

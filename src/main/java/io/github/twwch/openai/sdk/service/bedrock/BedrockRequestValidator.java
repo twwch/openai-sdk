@@ -3,6 +3,8 @@ package io.github.twwch.openai.sdk.service.bedrock;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -12,6 +14,7 @@ import java.util.Set;
  * 用于验证和清理请求参数，避免METRIC_VALUES错误
  */
 public class BedrockRequestValidator {
+    private static final Logger logger = LoggerFactory.getLogger(BedrockRequestValidator.class);
     
     private static final Set<String> SUPPORTED_PARAMS = new HashSet<>();
     
@@ -83,30 +86,30 @@ public class BedrockRequestValidator {
             // 检查是否包含不支持的参数
             root.fieldNames().forEachRemaining(fieldName -> {
                 if (!SUPPORTED_PARAMS.contains(fieldName)) {
-                    System.err.println("警告：请求包含不支持的参数: " + fieldName);
+                    logger.warn("请求包含不支持的参数: {}", fieldName);
                 }
             });
             
             // 检查必需参数
             if (!root.has("anthropic_version")) {
-                System.err.println("错误：缺少必需参数 anthropic_version");
+                logger.error("缺少必需参数 anthropic_version");
                 return false;
             }
             
             if (!root.has("max_tokens")) {
-                System.err.println("错误：缺少必需参数 max_tokens");
+                logger.error("缺少必需参数 max_tokens");
                 return false;
             }
             
             if (!root.has("messages")) {
-                System.err.println("错误：缺少必需参数 messages");
+                logger.error("缺少必需参数 messages");
                 return false;
             }
             
             return true;
             
         } catch (Exception e) {
-            System.err.println("验证请求失败: " + e.getMessage());
+            logger.error("验证请求失败", e);
             return false;
         }
     }
