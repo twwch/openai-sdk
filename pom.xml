@@ -6,7 +6,7 @@
 
     <groupId>io.github.twwch</groupId>
     <artifactId>openai-sdk</artifactId>
-    <version>1.1.17</version>
+    <version>1.1.18</version>
     <packaging>jar</packaging>
 
     <name>OpenAI Java SDK</name>
@@ -88,13 +88,12 @@
             <version>${slf4j.version}</version>
         </dependency>
         
-        <!-- Logback for testing/examples - optional runtime dependency -->
+        <!-- Logback only for testing - not included in the final artifact -->
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>1.4.11</version>
-            <scope>runtime</scope>
-            <optional>true</optional>
+            <scope>test</scope>
         </dependency>
 
         <!-- Testing -->
