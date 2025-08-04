@@ -121,11 +121,19 @@ public class BedrockToolsDemo {
             request.setTools(tools);
             
             // 设置工具选择策略
+            // 方式1: 使用 OpenAI 格式（强制使用特定工具）
             Map<String, Object> toolChoice = new HashMap<>();
-            toolChoice.put("type", "tool");
-            toolChoice.put("name", "get_current_weather");
-
+            toolChoice.put("type", "function");
+            Map<String, String> function = new HashMap<>();
+            function.put("name", "get_current_weather");
+            toolChoice.put("function", function);
             request.setToolChoice(toolChoice);
+            
+            // 方式2: 使用字符串（自动选择）
+            // request.setToolChoice("auto");
+            
+            // 方式3: 指定特定工具（直接使用工具名）
+            // request.setToolChoice("get_current_weather");
             
             // 调用流式API
             System.out.println("发送流式请求到Bedrock Claude模型...");

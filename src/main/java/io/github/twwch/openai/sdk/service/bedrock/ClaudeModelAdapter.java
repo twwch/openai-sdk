@@ -184,14 +184,28 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
             } else if ("required".equals(request.getToolChoice())) {
                 toolChoice.put("type", "any");
             } else if (request.getToolChoice() instanceof String) {
+                // 字符串形式，假定是工具名称
                 toolChoice.put("type", "tool");
                 toolChoice.put("name", (String) request.getToolChoice());
             } else if (request.getToolChoice() instanceof Map) {
                 // 处理对象形式的 tool_choice
                 Map<String, Object> tcMap = (Map<String, Object>) request.getToolChoice();
-                if (tcMap.containsKey("type")) {
-                    toolChoice.put("type", (String) tcMap.get("type"));
-                    if ("tool".equals(tcMap.get("type")) && tcMap.containsKey("name")) {
+                
+                // OpenAI 格式: {"type": "function", "function": {"name": "my_function"}}
+                if ("function".equals(tcMap.get("type")) && tcMap.containsKey("function")) {
+                    Map<String, Object> functionMap = (Map<String, Object>) tcMap.get("function");
+                    if (functionMap != null && functionMap.containsKey("name")) {
+                        toolChoice.put("type", "tool");
+                        toolChoice.put("name", (String) functionMap.get("name"));
+                    }
+                } 
+                // Bedrock 格式: {"type": "tool", "name": "my_function"} 或 {"type": "auto"}
+                else if (tcMap.containsKey("type")) {
+                    String type = (String) tcMap.get("type");
+                    if ("auto".equals(type) || "none".equals(type) || "any".equals(type)) {
+                        toolChoice.put("type", type);
+                    } else if ("tool".equals(type) && tcMap.containsKey("name")) {
+                        toolChoice.put("type", "tool");
                         toolChoice.put("name", (String) tcMap.get("name"));
                     }
                 }
