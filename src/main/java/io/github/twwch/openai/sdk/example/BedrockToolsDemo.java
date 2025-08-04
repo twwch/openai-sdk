@@ -121,7 +121,11 @@ public class BedrockToolsDemo {
             request.setTools(tools);
             
             // 设置工具选择策略
-            request.setToolChoice("auto");
+            Map<String, Object> toolChoice = new HashMap<>();
+            toolChoice.put("type", "tool");
+            toolChoice.put("name", "get_current_weather");
+
+            request.setToolChoice(toolChoice);
             
             // 调用流式API
             System.out.println("发送流式请求到Bedrock Claude模型...");

@@ -11,6 +11,7 @@ import io.github.twwch.openai.sdk.model.chat.ChatMessage;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -169,22 +170,35 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
             }
         }
         
-        // 设置tool_choice - 只有在有tools时才设置
-        if (request.getToolChoice() != null && request.getTools() != null && !request.getTools().isEmpty()) {
-            // Bedrock使用不同的tool_choice格式
-            // "auto" -> {"type": "auto"}
-            // "none" -> {"type": "none"}
-            // 特定工具 -> {"type": "tool", "name": "tool_name"}
+        // 设置tool_choice - 当有tools时必须设置
+        if (request.getTools() != null && !request.getTools().isEmpty()) {
             ObjectNode toolChoice = objectMapper.createObjectNode();
-            if ("auto".equals(request.getToolChoice())) {
+            
+            if (request.getToolChoice() == null) {
+                // 如果没有指定，默认为 auto
+                toolChoice.put("type", "auto");
+            } else if ("auto".equals(request.getToolChoice())) {
                 toolChoice.put("type", "auto");
             } else if ("none".equals(request.getToolChoice())) {
                 toolChoice.put("type", "none");
+            } else if ("required".equals(request.getToolChoice())) {
+                toolChoice.put("type", "any");
             } else if (request.getToolChoice() instanceof String) {
                 toolChoice.put("type", "tool");
                 toolChoice.put("name", (String) request.getToolChoice());
+            } else if (request.getToolChoice() instanceof Map) {
+                // 处理对象形式的 tool_choice
+                Map<String, Object> tcMap = (Map<String, Object>) request.getToolChoice();
+                if (tcMap.containsKey("type")) {
+                    toolChoice.put("type", (String) tcMap.get("type"));
+                    if ("tool".equals(tcMap.get("type")) && tcMap.containsKey("name")) {
+                        toolChoice.put("name", (String) tcMap.get("name"));
+                    }
+                }
             }
+            
             bedrockRequest.set("tool_choice", toolChoice);
+            System.out.println("设置 tool_choice: " + toolChoice.toString());
         }
         
         return objectMapper.writeValueAsString(bedrockRequest);
