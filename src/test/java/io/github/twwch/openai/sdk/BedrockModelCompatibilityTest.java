@@ -14,20 +14,20 @@ public class BedrockModelCompatibilityTest {
     
     public static void main(String[] args) throws Exception {
         // 从环境变量获取凭证
-        String bearerKey = System.getenv("AWS_BEARER_KEY_BEDROCK");
-        String bearerToken = System.getenv("AWS_BEARER_TOKEN_BEDROCK");
+        String accessKeyId = System.getenv("AWS_ACCESS_KEY_ID");
+        String secretAccessKey = System.getenv("AWS_SECRET_ACCESS_KEY");
         String modelId =  "us.anthropic.claude-3-7-sonnet-20250219-v1:0";
 
-        if (bearerKey == null || bearerToken == null) {
-            System.err.println("请设置环境变量 AWS_BEARER_KEY_BEDROCK 和 AWS_BEARER_TOKEN_BEDROCK");
+        if (accessKeyId == null || secretAccessKey == null) {
+            System.err.println("请设置环境变量 AWS_ACCESS_KEY_ID 和 AWS_SECRET_ACCESS_KEY");
             System.exit(1);
         }
 
-        System.out.println("Bearer Key: " + bearerKey);
-        System.out.println("Bearer Token: " + bearerToken);
+        System.out.println("Access Key ID: " + accessKeyId.substring(0, 10) + "...");
+        System.out.println("Secret Access Key: ***");
         System.out.println("modelId: " + modelId);
 
-        OpenAI client = OpenAI.bedrock("us-east-2", bearerKey, bearerToken, modelId);
+        OpenAI client = OpenAI.bedrock("us-east-2", accessKeyId, secretAccessKey, modelId);
 
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.user("计算 123 + 456 的结果"));

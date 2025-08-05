@@ -21,13 +21,10 @@ public class BedrockToolsDemo {
         String accessKeyId = System.getenv("AWS_ACCESS_KEY_ID");
         String secretAccessKey = System.getenv("AWS_SECRET_ACCESS_KEY");
         String modelId = "us.anthropic.claude-3-7-sonnet-20250219-v1:0";
-        
-        // 如果使用Bedrock API Key
-        if (System.getenv("AWS_BEARER_KEY_BEDROCK") != null) {
-            accessKeyId = System.getenv("AWS_BEARER_KEY_BEDROCK");
-            secretAccessKey = System.getenv("AWS_BEARER_TOKEN_BEDROCK");
-        }
-        
+
+        System.out.println("Bedrock API Key: " + accessKeyId);
+        System.out.println("Bedrock Model ID: " + modelId);
+
         OpenAI openai = OpenAI.bedrock(region, accessKeyId, secretAccessKey, modelId);
         
         try {

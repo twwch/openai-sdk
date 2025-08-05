@@ -13,12 +13,8 @@ public class BedrockExample {
     public static void main(String[] args) {
         // 示例1：使用默认凭证（从AWS配置文件或环境变量获取）
         System.out.println("\n=== 示例2：使用访问密钥 ===");
-        String accessKeyId =System.getenv("AWS_BEARER_KEY_BEDROCK");
-        String secretAccessKey = System.getenv("AWS_BEARER_TOKEN_BEDROCK");
-
-        System.out.println(accessKeyId);
-
-        System.out.println(secretAccessKey);
+        String accessKeyId = System.getenv("AWS_ACCESS_KEY_ID");
+        String secretAccessKey = System.getenv("AWS_SECRET_ACCESS_KEY");
         
         if (accessKeyId != null && secretAccessKey != null) {
             // 尝试使用 Claude v2（更广泛支持的模型）
