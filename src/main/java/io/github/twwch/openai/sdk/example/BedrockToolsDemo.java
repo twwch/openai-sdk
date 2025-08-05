@@ -119,15 +119,15 @@ public class BedrockToolsDemo {
             
             // 设置工具选择策略
             // 方式1: 使用 OpenAI 格式（强制使用特定工具）
-//            Map<String, Object> toolChoice = new HashMap<>();
-//            toolChoice.put("type", "function");
-//            Map<String, String> function = new HashMap<>();
-//            function.put("name", "get_current_weather");
-//            toolChoice.put("function", function);
-//            request.setToolChoice(toolChoice);
+            Map<String, Object> toolChoice = new HashMap<>();
+            toolChoice.put("type", "function");
+            Map<String, String> function = new HashMap<>();
+            function.put("name", "get_current_weather");
+            toolChoice.put("function", function);
+            request.setToolChoice(toolChoice);
             
             // 方式2: 使用字符串（自动选择）
-             request.setToolChoice("auto");
+//             request.setToolChoice("auto");
             
             // 方式3: 指定特定工具（直接使用工具名）
             // request.setToolChoice("get_current_weather");
@@ -183,7 +183,9 @@ public class BedrockToolsDemo {
      */
     static class StreamResponseCollector {
         private StringBuilder content = new StringBuilder();
-        private Map<String, ToolCallBuilder> toolCallBuilders = new HashMap<>();
+        private Map<String, ToolCallBuilder> toolCallBuilders = new LinkedHashMap<>(); // 使用LinkedHashMap保持插入顺序
+        private List<String> toolCallOrder = new ArrayList<>(); // 记录工具调用的顺序
+        private Map<Integer, String> indexToToolId = new HashMap<>(); // 记录index到toolId的映射
         private int chunkCount = 0;
         
         public void processChunk(ChatCompletionChunk chunk) {
@@ -205,9 +207,21 @@ public class BedrockToolsDemo {
                         // 1. 有ID的新工具调用（content_block_start）
                         // 2. 有index的参数更新（content_block_delta）
                         
+                        // 调试信息
+                        System.out.println("\n[DEBUG] ToolCall - ID: " + toolCall.getId() + 
+                                         ", Index: " + toolCall.getIndex() + 
+                                         ", Type: " + toolCall.getType());
+                        if (toolCall.getFunction() != null) {
+                            System.out.println("[DEBUG] Function - Name: " + toolCall.getFunction().getName() + 
+                                             ", Args: " + toolCall.getFunction().getArguments());
+                        }
+                        
                         String toolId = toolCall.getId();
                         if (toolId != null) {
                             // 新的工具调用
+                            if (!toolCallBuilders.containsKey(toolId)) {
+                                toolCallOrder.add(toolId); // 记录顺序
+                            }
                             ToolCallBuilder builder = toolCallBuilders.computeIfAbsent(
                                 toolId, k -> new ToolCallBuilder(toolId)
                             );
@@ -215,15 +229,24 @@ public class BedrockToolsDemo {
                             if (toolCall.getFunction() != null && toolCall.getFunction().getName() != null) {
                                 builder.setName(toolCall.getFunction().getName());
                             }
+                            // 如果第一个chunk就有参数，也要添加
+                            if (toolCall.getFunction() != null && toolCall.getFunction().getArguments() != null) {
+                                builder.appendArguments(toolCall.getFunction().getArguments());
+                            }
                         } else if (toolCall.getIndex() >= 0) {
                             // 参数更新 - 通过index找到对应的builder
-                            // 假设工具调用按顺序出现
-                            List<ToolCallBuilder> builders = new ArrayList<>(toolCallBuilders.values());
-                            if (toolCall.getIndex() < builders.size()) {
-                                ToolCallBuilder builder = builders.get(toolCall.getIndex());
-                                if (toolCall.getFunction() != null && toolCall.getFunction().getArguments() != null) {
+                            // Claude的index可能包含了文本块，所以不能直接用作工具调用的索引
+                            // 我们需要找到最后一个创建的工具调用
+                            if (!toolCallOrder.isEmpty()) {
+                                // 假设参数更新是针对最后一个工具调用的
+                                String lastToolId = toolCallOrder.get(toolCallOrder.size() - 1);
+                                ToolCallBuilder builder = toolCallBuilders.get(lastToolId);
+                                if (builder != null && toolCall.getFunction() != null && toolCall.getFunction().getArguments() != null) {
                                     builder.appendArguments(toolCall.getFunction().getArguments());
+                                    System.out.println("[DEBUG] Appending args to tool " + lastToolId + ": " + toolCall.getFunction().getArguments());
                                 }
+                            } else {
+                                System.out.println("[DEBUG] Warning: No tool calls to append arguments to");
                             }
                         }
                     }

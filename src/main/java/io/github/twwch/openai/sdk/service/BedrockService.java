@@ -24,7 +24,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
@@ -194,10 +193,6 @@ public class BedrockService {
             // 使用配置的模型ID覆盖请求中的模型
             String modelId = config.getModelId();
             
-            // 保存 tool_choice 信息，用于处理流式响应
-            final Object toolChoice = request.getToolChoice();
-            final List<ChatCompletionRequest.Tool> tools = request.getTools();
-            
             // 转换请求格式（流式）
             bedrockRequest = modelAdapter.convertStreamRequest(request, objectMapper);
             
@@ -216,9 +211,6 @@ public class BedrockService {
                     .accept("application/json")
                     .build();
             
-            // 创建一个标志来跟踪是否已经发送了工具调用
-            final boolean[] toolCallSent = {false};
-            
             // 处理流式响应
             InvokeModelWithResponseStreamResponseHandler responseHandler = InvokeModelWithResponseStreamResponseHandler.builder()
                     .subscriber(responseStream -> {
@@ -230,38 +222,6 @@ public class BedrockService {
                                 // 转换并发送chunk
                                 List<ChatCompletionChunk> chunks = modelAdapter.convertStreamChunk(chunk, objectMapper);
                                 for (ChatCompletionChunk completionChunk : chunks) {
-                                    // 检查是否是 tool_use 结束但没有工具调用数据
-                                    if (!toolCallSent[0] && 
-                                        completionChunk.getChoices() != null && 
-                                        !completionChunk.getChoices().isEmpty() &&
-                                        "tool_use".equals(completionChunk.getChoices().get(0).getFinishReason()) &&
-                                        toolChoice != null && tools != null) {
-                                        
-                                        // 基于 tool_choice 推断工具调用
-                                        ChatCompletionChunk.Delta delta = completionChunk.getChoices().get(0).getDelta();
-                                        if (delta != null && (delta.getToolCalls() == null || delta.getToolCalls().isEmpty())) {
-                                            String toolName = extractToolName(toolChoice);
-                                            if (toolName != null) {
-                                                logger.debug("基于tool_choice推断工具调用: {}", toolName);
-                                                
-                                                List<ChatMessage.ToolCall> toolCalls = new ArrayList<>();
-                                                ChatMessage.ToolCall toolCall = new ChatMessage.ToolCall();
-                                                toolCall.setId("inferred-" + UUID.randomUUID());
-                                                toolCall.setType("function");
-                                                
-                                                ChatMessage.ToolCall.Function function = new ChatMessage.ToolCall.Function();
-                                                function.setName(toolName);
-                                                function.setArguments("{}"); // 空参数
-                                                
-                                                toolCall.setFunction(function);
-                                                toolCalls.add(toolCall);
-                                                delta.setToolCalls(toolCalls);
-                                                
-                                                toolCallSent[0] = true;
-                                            }
-                                        }
-                                    }
-                                    
                                     if (onChunk != null) {
                                         onChunk.accept(completionChunk);
                                     }
@@ -298,33 +258,5 @@ public class BedrockService {
                 onError.accept(new OpenAIException("Bedrock流式请求失败: " + e.getMessage(), e));
             }
         }
-    }
-    
-    /**
-     * 从 tool_choice 中提取工具名称
-     */
-    private String extractToolName(Object toolChoice) {
-        if (toolChoice instanceof String) {
-            String choice = (String) toolChoice;
-            // 忽略特殊的tool_choice值
-            if ("auto".equals(choice) || "none".equals(choice) || "required".equals(choice)) {
-                return null;
-            }
-            return choice;
-        } else if (toolChoice instanceof Map) {
-            Map<String, Object> tcMap = (Map<String, Object>) toolChoice;
-            // OpenAI 格式: {"type": "function", "function": {"name": "tool_name"}}
-            if (tcMap.containsKey("function")) {
-                Map<String, Object> functionMap = (Map<String, Object>) tcMap.get("function");
-                if (functionMap != null && functionMap.containsKey("name")) {
-                    return (String) functionMap.get("name");
-                }
-            }
-            // 直接格式: {"type": "tool", "name": "tool_name"}
-            else if (tcMap.containsKey("name")) {
-                return (String) tcMap.get("name");
-            }
-        }
-        return null;
     }
 }
