@@ -27,7 +27,7 @@ public class ChatMessage {
     public ChatMessage() {
     }
 
-    public ChatMessage(String role, String content) {
+    public ChatMessage(String role, Object content) {
         this.role = role;
         this.content = content;
     }
@@ -106,21 +106,39 @@ public class ChatMessage {
     }
 
     /**
-     * 创建用户消息
+     * 创建用户消息（文本）
      * @param content 消息内容
      * @return 用户消息
      */
     public static ChatMessage user(String content) {
         return new ChatMessage("user", content);
     }
+    
+    /**
+     * 创建用户消息（多模态内容）
+     * @param parts 内容部分数组
+     * @return 用户消息
+     */
+    public static ChatMessage user(ContentPart... parts) {
+        return new ChatMessage("user", parts);
+    }
 
     /**
-     * 创建助手消息
+     * 创建助手消息（文本）
      * @param content 消息内容
      * @return 助手消息
      */
     public static ChatMessage assistant(String content) {
         return new ChatMessage("assistant", content);
+    }
+    
+    /**
+     * 创建助手消息（多模态内容）
+     * @param parts 内容部分数组
+     * @return 助手消息
+     */
+    public static ChatMessage assistant(ContentPart... parts) {
+        return new ChatMessage("assistant", parts);
     }
 
     /**
@@ -159,6 +177,35 @@ public class ChatMessage {
         message.setName(name);
         message.setToolCallId(toolCallId);
         return message;
+    }
+    
+    /**
+     * 创建包含文本和图片的用户消息（便捷方法）
+     * @param text 文本内容
+     * @param imageUrl 图片URL或base64编码
+     * @return 用户消息
+     */
+    public static ChatMessage userWithImage(String text, String imageUrl) {
+        ContentPart[] parts = new ContentPart[] {
+            ContentPart.text(text),
+            ContentPart.imageUrl(imageUrl)
+        };
+        return new ChatMessage("user", parts);
+    }
+    
+    /**
+     * 创建包含多张图片的用户消息（便捷方法）
+     * @param text 文本内容
+     * @param imageUrls 图片URL或base64编码数组
+     * @return 用户消息
+     */
+    public static ChatMessage userWithImages(String text, String... imageUrls) {
+        ContentPart[] parts = new ContentPart[imageUrls.length + 1];
+        parts[0] = ContentPart.text(text);
+        for (int i = 0; i < imageUrls.length; i++) {
+            parts[i + 1] = ContentPart.imageUrl(imageUrls[i]);
+        }
+        return new ChatMessage("user", parts);
     }
 
     /**
