@@ -8,10 +8,13 @@ import io.github.twwch.openai.sdk.model.chat.ChatCompletionChunk;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
 import io.github.twwch.openai.sdk.model.chat.ChatMessage;
+import io.github.twwch.openai.sdk.util.ImageUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -44,7 +47,7 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                 if (systemPrompt.length() > 0) {
                     systemPrompt.append("\n\n");
                 }
-                systemPrompt.append(message.getContent());
+                systemPrompt.append(message.getContentAsString());
             } else if ("tool".equals(message.getRole())) {
                 // Bedrock不支持tool角色，需要转换为特定格式的user消息
                 ObjectNode bedrockMessage = objectMapper.createObjectNode();
@@ -55,7 +58,7 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                 ObjectNode toolResult = objectMapper.createObjectNode();
                 toolResult.put("type", "tool_result");
                 toolResult.put("tool_use_id", message.getToolCallId());
-                toolResult.put("content", message.getContent());
+                toolResult.put("content", message.getContentAsString());
                 contentArray.add(toolResult);
                 
                 bedrockMessage.set("content", contentArray);
@@ -70,11 +73,12 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                     ArrayNode contentArray = objectMapper.createArrayNode();
                     
                     // 添加文本内容
-                    if (message.getContent() != null && !message.getContent().isEmpty()) {
-                        ObjectNode textContent = objectMapper.createObjectNode();
-                        textContent.put("type", "text");
-                        textContent.put("text", message.getContent());
-                        contentArray.add(textContent);
+                    String textContent = message.getContentAsString();
+                    if (textContent != null && !textContent.isEmpty()) {
+                        ObjectNode textNode = objectMapper.createObjectNode();
+                        textNode.put("type", "text");
+                        textNode.put("text", textContent);
+                        contentArray.add(textNode);
                     }
                     
                     // 添加工具调用
@@ -100,8 +104,79 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                     
                     bedrockMessage.set("content", contentArray);
                 } else {
-                    // 普通消息
-                    bedrockMessage.put("content", message.getContent());
+                    // 处理内容 - 可能是字符串或数组
+                    Object content = message.getContent();
+                    if (content instanceof String) {
+                        bedrockMessage.put("content", (String) content);
+                    } else if (content instanceof ChatMessage.ContentPart[]) {
+                        // 转换ContentPart数组为Bedrock格式
+                        ArrayNode contentArray = objectMapper.createArrayNode();
+                        ChatMessage.ContentPart[] parts = (ChatMessage.ContentPart[]) content;
+                        
+                        // 首先收集所有需要下载的URL图片
+                        List<String> urlsToDownload = new ArrayList<>();
+                        for (ChatMessage.ContentPart part : parts) {
+                            if ("image_url".equals(part.getType()) && part.getImageUrl() != null) {
+                                String url = part.getImageUrl().getUrl();
+                                if (!url.startsWith("data:image/")) {
+                                    urlsToDownload.add(url);
+                                }
+                            }
+                        }
+                        
+                        // 并发下载所有URL图片
+                        Map<String, String> downloadedImages = new HashMap<>();
+                        if (!urlsToDownload.isEmpty()) {
+                            logger.info("Batch downloading {} images for Bedrock Claude", urlsToDownload.size());
+                            downloadedImages = ImageUtils.downloadAndConvertBatch(urlsToDownload);
+                        }
+                        
+                        // 处理所有内容部分
+                        for (ChatMessage.ContentPart part : parts) {
+                            if ("text".equals(part.getType())) {
+                                ObjectNode textNode = objectMapper.createObjectNode();
+                                textNode.put("type", "text");
+                                textNode.put("text", part.getText());
+                                contentArray.add(textNode);
+                            } else if ("image_url".equals(part.getType()) && part.getImageUrl() != null) {
+                                String url = part.getImageUrl().getUrl();
+                                ObjectNode imageNode = objectMapper.createObjectNode();
+                                imageNode.put("type", "image");
+                                ObjectNode sourceNode = objectMapper.createObjectNode();
+                                
+                                String base64Data = null;
+                                if (url.startsWith("data:image/")) {
+                                    // 已经是base64编码的图片
+                                    base64Data = url;
+                                } else {
+                                    // 从downloadedImages中获取已下载的图片
+                                    base64Data = downloadedImages.get(url);
+                                    if (base64Data == null) {
+                                        logger.error("Failed to download image: {}", url);
+                                        continue;
+                                    }
+                                }
+                                
+                                // 解析base64数据
+                                String[] parts2 = base64Data.split(",", 2);
+                                if (parts2.length == 2) {
+                                    String mediaType = parts2[0].substring(5, parts2[0].indexOf(";"));
+                                    sourceNode.put("type", "base64");
+                                    sourceNode.put("media_type", mediaType);
+                                    sourceNode.put("data", parts2[1]);
+                                    imageNode.set("source", sourceNode);
+                                    contentArray.add(imageNode);
+                                } else {
+                                    logger.error("Failed to parse base64 data for image: {}", url);
+                                }
+                            }
+                        }
+                        
+                        bedrockMessage.set("content", contentArray);
+                    } else if (content != null) {
+                        // 尝试将其他类型转换为JSON
+                        bedrockMessage.set("content", objectMapper.valueToTree(content));
+                    }
                 }
                 
                 bedrockMessages.add(bedrockMessage);

@@ -31,18 +31,19 @@ public class LlamaModelAdapter implements BedrockModelAdapter {
         List<ChatMessage> messages = request.getMessages();
         
         for (ChatMessage message : messages) {
+            String content = message.getContentAsString();
             if ("system".equals(message.getRole())) {
                 prompt.append("<s>[INST] <<SYS>>\n");
-                prompt.append(message.getContent());
+                prompt.append(content);
                 prompt.append("\n<</SYS>>\n\n");
             } else if ("user".equals(message.getRole())) {
                 if (prompt.length() == 0) {
                     prompt.append("<s>[INST] ");
                 }
-                prompt.append(message.getContent());
+                prompt.append(content);
                 prompt.append(" [/INST]");
             } else if ("assistant".equals(message.getRole())) {
-                prompt.append(" ").append(message.getContent()).append(" </s><s>[INST] ");
+                prompt.append(" ").append(content).append(" </s><s>[INST] ");
             }
         }
         

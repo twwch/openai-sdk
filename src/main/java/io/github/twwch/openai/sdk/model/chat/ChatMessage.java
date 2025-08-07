@@ -11,7 +11,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ChatMessage {
     private String role;
-    private String content;
+    private Object content; // 支持String或ContentPart[]
     private String name;
     
     @JsonProperty("tool_call_id")
@@ -40,12 +40,28 @@ public class ChatMessage {
         this.role = role;
     }
 
-    public String getContent() {
+    public Object getContent() {
         return content;
     }
 
-    public void setContent(String content) {
+    public void setContent(Object content) {
         this.content = content;
+    }
+    
+    // 便捷方法：获取字符串内容
+    public String getContentAsString() {
+        if (content instanceof String) {
+            return (String) content;
+        } else if (content instanceof ContentPart[]) {
+            StringBuilder sb = new StringBuilder();
+            for (ContentPart part : (ContentPart[]) content) {
+                if ("text".equals(part.getType()) && part.getText() != null) {
+                    sb.append(part.getText());
+                }
+            }
+            return sb.toString();
+        }
+        return null;
     }
 
     public String getName() {
@@ -169,6 +185,83 @@ public class ChatMessage {
         }
     }
 
+    /**
+     * 内容部分 - 支持文本和图片
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ContentPart {
+        private String type; // "text" 或 "image_url"
+        private String text;
+        @JsonProperty("image_url")
+        private ImageUrl imageUrl;
+        
+        public String getType() {
+            return type;
+        }
+        
+        public void setType(String type) {
+            this.type = type;
+        }
+        
+        public String getText() {
+            return text;
+        }
+        
+        public void setText(String text) {
+            this.text = text;
+        }
+        
+        public ImageUrl getImageUrl() {
+            return imageUrl;
+        }
+        
+        public void setImageUrl(ImageUrl imageUrl) {
+            this.imageUrl = imageUrl;
+        }
+        
+        // 便捷创建方法
+        public static ContentPart text(String text) {
+            ContentPart part = new ContentPart();
+            part.setType("text");
+            part.setText(text);
+            return part;
+        }
+        
+        public static ContentPart imageUrl(String url) {
+            ContentPart part = new ContentPart();
+            part.setType("image_url");
+            ImageUrl img = new ImageUrl();
+            img.setUrl(url);
+            part.setImageUrl(img);
+            return part;
+        }
+        
+        /**
+         * 图片URL
+         */
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public static class ImageUrl {
+            private String url;
+            private String detail; // "auto", "low", "high"
+            
+            public String getUrl() {
+                return url;
+            }
+            
+            public void setUrl(String url) {
+                this.url = url;
+            }
+            
+            public String getDetail() {
+                return detail;
+            }
+            
+            public void setDetail(String detail) {
+                this.detail = detail;
+            }
+        }
+    }
+    
     /**
      * 工具调用
      */

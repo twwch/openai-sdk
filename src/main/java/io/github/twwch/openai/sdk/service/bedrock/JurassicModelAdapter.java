@@ -32,12 +32,13 @@ public class JurassicModelAdapter implements BedrockModelAdapter {
         List<ChatMessage> messages = request.getMessages();
         
         for (ChatMessage message : messages) {
+            String content = message.getContentAsString();
             if ("system".equals(message.getRole())) {
-                prompt.append("System: ").append(message.getContent()).append("\n\n");
+                prompt.append("System: ").append(content).append("\n\n");
             } else if ("user".equals(message.getRole())) {
-                prompt.append("User: ").append(message.getContent()).append("\n\n");
+                prompt.append("User: ").append(content).append("\n\n");
             } else if ("assistant".equals(message.getRole())) {
-                prompt.append("Assistant: ").append(message.getContent()).append("\n\n");
+                prompt.append("Assistant: ").append(content).append("\n\n");
             }
         }
         

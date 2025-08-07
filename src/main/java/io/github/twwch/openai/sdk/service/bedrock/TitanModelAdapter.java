@@ -32,12 +32,13 @@ public class TitanModelAdapter implements BedrockModelAdapter {
         List<ChatMessage> messages = request.getMessages();
         
         for (ChatMessage message : messages) {
+            String content = message.getContentAsString();
             if ("system".equals(message.getRole())) {
-                inputText.append("System: ").append(message.getContent()).append("\n\n");
+                inputText.append("System: ").append(content).append("\n\n");
             } else if ("user".equals(message.getRole())) {
-                inputText.append("User: ").append(message.getContent()).append("\n\n");
+                inputText.append("User: ").append(content).append("\n\n");
             } else if ("assistant".equals(message.getRole())) {
-                inputText.append("Assistant: ").append(message.getContent()).append("\n\n");
+                inputText.append("Assistant: ").append(content).append("\n\n");
             }
         }
         inputText.append("Assistant: ");

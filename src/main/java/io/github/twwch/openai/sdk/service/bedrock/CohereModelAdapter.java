@@ -37,12 +37,13 @@ public class CohereModelAdapter implements BedrockModelAdapter {
             List<ChatMessage> messages = request.getMessages();
             
             for (ChatMessage msg : messages) {
+                String content = msg.getContentAsString();
                 if ("system".equals(msg.getRole())) {
-                    message.append("System: ").append(msg.getContent()).append("\n\n");
+                    message.append("System: ").append(content).append("\n\n");
                 } else if ("user".equals(msg.getRole())) {
-                    message.append("User: ").append(msg.getContent()).append("\n\n");
+                    message.append("User: ").append(content).append("\n\n");
                 } else if ("assistant".equals(msg.getRole())) {
-                    message.append("Assistant: ").append(msg.getContent()).append("\n\n");
+                    message.append("Assistant: ").append(content).append("\n\n");
                 }
             }
             
@@ -53,12 +54,13 @@ public class CohereModelAdapter implements BedrockModelAdapter {
             List<ChatMessage> messages = request.getMessages();
             
             for (ChatMessage msg : messages) {
+                String content = msg.getContentAsString();
                 if ("system".equals(msg.getRole())) {
-                    prompt.append("System: ").append(msg.getContent()).append("\n\n");
+                    prompt.append("System: ").append(content).append("\n\n");
                 } else if ("user".equals(msg.getRole())) {
-                    prompt.append("User: ").append(msg.getContent()).append("\n\n");
+                    prompt.append("User: ").append(content).append("\n\n");
                 } else if ("assistant".equals(msg.getRole())) {
-                    prompt.append("Assistant: ").append(msg.getContent()).append("\n\n");
+                    prompt.append("Assistant: ").append(content).append("\n\n");
                 }
             }
             
