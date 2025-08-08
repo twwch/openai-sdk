@@ -49,6 +49,8 @@ public class ChatMessage {
     }
     
     // 便捷方法：获取字符串内容
+    // 注意：添加@JsonIgnore防止序列化
+    @com.fasterxml.jackson.annotation.JsonIgnore
     public String getContentAsString() {
         if (content instanceof String) {
             return (String) content;

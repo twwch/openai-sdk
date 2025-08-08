@@ -16,7 +16,7 @@ public class BedrockConfig extends OpenAIConfig {
      * @param modelId Bedrock模型ID
      */
     public BedrockConfig(String region, String modelId) {
-        super("bedrock", "https://bedrock-runtime." + region + ".amazonaws.com");
+        super("bedrock", "https://bedrock-runtime." + region + ".amazonaws.com", 600, null);  // 10分钟超时
         this.region = region;
         this.modelId = modelId;
     }
@@ -29,7 +29,7 @@ public class BedrockConfig extends OpenAIConfig {
      * @param modelId Bedrock模型ID
      */
     public BedrockConfig(String region, String accessKeyId, String secretAccessKey, String modelId) {
-        super("bedrock", "https://bedrock-runtime." + region + ".amazonaws.com");
+        super("bedrock", "https://bedrock-runtime." + region + ".amazonaws.com", 600, null);  // 10分钟超时
         this.region = region;
         this.accessKeyId = accessKeyId;
         this.secretAccessKey = secretAccessKey;
@@ -45,7 +45,7 @@ public class BedrockConfig extends OpenAIConfig {
      * @param modelId Bedrock模型ID
      */
     public BedrockConfig(String region, String accessKeyId, String secretAccessKey, String sessionToken, String modelId) {
-        super("bedrock", "https://bedrock-runtime." + region + ".amazonaws.com");
+        super("bedrock", "https://bedrock-runtime." + region + ".amazonaws.com", 600, null);  // 10分钟超时
         this.region = region;
         this.accessKeyId = accessKeyId;
         this.secretAccessKey = secretAccessKey;

@@ -24,7 +24,7 @@ public class OpenAIConfig {
      * @param baseUrl API基础URL
      */
     public OpenAIConfig(String apiKey, String baseUrl) {
-        this(apiKey, baseUrl, 30, null);
+        this(apiKey, baseUrl, 600, null);  // 默认10分钟超时
     }
 
     /**

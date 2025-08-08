@@ -26,7 +26,7 @@ public class AzureOpenAIConfig extends OpenAIConfig {
      * @param apiVersion API版本
      */
     public AzureOpenAIConfig(String apiKey, String resourceName, String deploymentId, String apiVersion) {
-        super(apiKey, buildBaseUrl(resourceName), 30, null);
+        super(apiKey, buildBaseUrl(resourceName), 600, null);  // 10分钟超时
         this.resourceName = resourceName;
         this.deploymentId = deploymentId;
         this.apiVersion = apiVersion;

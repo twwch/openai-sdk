@@ -129,7 +129,6 @@ public class OpenAIService {
             AzureOpenAIConfig azureConfig = (AzureOpenAIConfig) config;
             request.setModel(azureConfig.getDeploymentId());
         }
-        
         String response = httpClient.post("/chat/completions", request);
         try {
             return objectMapper.readValue(response, ChatCompletionResponse.class);
