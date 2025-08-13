@@ -169,6 +169,22 @@ public class GeminiService {
                 
                 try {
                     ChatCompletionChunk chunk = objectMapper.readValue(data, ChatCompletionChunk.class);
+                    // 处理Gemini可能返回空id的情况
+                    if (chunk.getChoices() != null && !chunk.getChoices().isEmpty()) {
+                        ChatCompletionChunk.Delta delta = chunk.getChoices().get(0).getDelta();
+                        if (delta != null && delta.getToolCalls() != null) {
+                            for (ChatMessage.ToolCall toolCall : delta.getToolCalls()) {
+                                if (toolCall.getId() == null || toolCall.getId().isEmpty()) {
+                                    String generatedId = chunk.getId() != null ? 
+                                        "tool_" + chunk.getId() : 
+                                        "tool_" + System.currentTimeMillis() + "_" + toolCall.getFunction().getName();
+                                    toolCall.setId(generatedId);
+                                    logger.debug("Gemini流式响应中tool_call缺少id，生成id: {}", generatedId);
+                                }
+                            }
+                        }
+                    }
+                    
                     if (onChunk != null) {
                         onChunk.accept(chunk);
                     }

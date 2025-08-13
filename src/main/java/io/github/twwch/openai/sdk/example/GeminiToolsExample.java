@@ -53,7 +53,8 @@ public class GeminiToolsExample {
     /**
      * 天气查询工具调用示例
      */
-    private static void weatherToolExample(OpenAI client) throws Exception {
+    private static void weatherToolExample(OpenAI client) {
+        try {
         // 创建工具定义
         List<ChatCompletionRequest.Tool> tools = new ArrayList<>();
         tools.add(createWeatherTool());
@@ -86,7 +87,8 @@ public class GeminiToolsExample {
                 
                 // 添加工具结果到对话
                 messages.add(assistantMessage);
-                messages.add(ChatMessage.tool(toolCall.getId(), toolResult));
+                // Gemini需要工具名称，使用带名称的tool方法
+                messages.add(ChatMessage.tool(toolCall.getFunction().getName(), toolCall.getId(), toolResult));
                 
                 // 再次调用获取最终响应
                 request.setMessages(messages);
@@ -97,12 +99,17 @@ public class GeminiToolsExample {
         } else {
             System.out.println("回答: " + response.getContent());
         }
+        } catch (Exception e) {
+            System.err.println("天气查询示例出错: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
     
     /**
      * 多工具并行调用示例
      */
-    private static void multipleToolsExample(OpenAI client) throws Exception {
+    private static void multipleToolsExample(OpenAI client) {
+        try {
         // 创建多个工具
         List<ChatCompletionRequest.Tool> tools = new ArrayList<>();
         tools.add(createWeatherTool());
@@ -140,8 +147,8 @@ public class GeminiToolsExample {
                     toolCall.getFunction().getArguments()
                 );
                 
-                // 添加工具结果
-                messages.add(ChatMessage.tool(result, toolCall.getId()));
+                // 添加工具结果 (Gemini需要工具名称)
+                messages.add(ChatMessage.tool(toolCall.getFunction().getName(), toolCall.getId(), result));
             }
             
             // 获取最终响应
@@ -150,12 +157,17 @@ public class GeminiToolsExample {
             ChatCompletionResponse finalResponse = client.createChatCompletion(request);
             System.out.println("\n最终回答: " + finalResponse.getContent());
         }
+        } catch (Exception e) {
+            System.err.println("多工具调用示例出错: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
     
     /**
      * 流式工具调用示例
      */
-    private static void streamingToolExample(OpenAI client) throws Exception {
+    private static void streamingToolExample(OpenAI client) {
+        try {
         // 创建工具
         List<ChatCompletionRequest.Tool> tools = new ArrayList<>();
         tools.add(createWeatherTool());
@@ -204,12 +216,17 @@ public class GeminiToolsExample {
         
         // 等待完成
         latch.await();
+        } catch (Exception e) {
+            System.err.println("流式工具调用示例出错: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
     
     /**
      * 复杂工具编排示例 - 旅行助手
      */
-    private static void complexToolOrchestrationExample(OpenAI client) throws Exception {
+    private static void complexToolOrchestrationExample(OpenAI client) {
+        try {
         // 创建旅行相关工具
         List<ChatCompletionRequest.Tool> tools = createTravelTools();
         
@@ -247,7 +264,8 @@ public class GeminiToolsExample {
                         toolCall.getFunction().getName(),
                         toolCall.getFunction().getArguments()
                     );
-                    messages.add(ChatMessage.tool(result, toolCall.getId()));
+                    // Gemini需要工具名称
+                    messages.add(ChatMessage.tool(toolCall.getFunction().getName(), toolCall.getId(), result));
                 }
                 
                 request.setMessages(messages);
@@ -257,6 +275,10 @@ public class GeminiToolsExample {
                 System.out.println(response.getContent());
                 break;
             }
+        }
+        } catch (Exception e) {
+            System.err.println("复杂工具编排示例出错: " + e.getMessage());
+            e.printStackTrace();
         }
     }
     
