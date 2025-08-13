@@ -6,8 +6,8 @@ import io.github.twwch.openai.sdk.model.chat.ChatCompletionChunk;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
 import io.github.twwch.openai.sdk.model.chat.ChatMessage;
-import io.github.twwch.openai.sdk.service.OpenAIService;
 import io.github.twwch.openai.sdk.service.GeminiService;
+import io.github.twwch.openai.sdk.service.OpenAIService;
 
 import java.util.ArrayList;
 import java.util.Arrays;

@@ -6,9 +6,9 @@ import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
 import io.github.twwch.openai.sdk.model.chat.ChatMessage;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
 
 /**
  * Google Gemini API使用示例

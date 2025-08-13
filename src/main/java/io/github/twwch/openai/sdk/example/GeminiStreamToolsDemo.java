@@ -1,10 +1,9 @@
 package io.github.twwch.openai.sdk.example;
 
 import io.github.twwch.openai.sdk.OpenAI;
-import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
-import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
-import io.github.twwch.openai.sdk.model.chat.ChatMessage;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionChunk;
+import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
+import io.github.twwch.openai.sdk.model.chat.ChatMessage;
 
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
@@ -49,7 +48,7 @@ public class GeminiStreamToolsDemo {
         // 初始化消息列表
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.system("你是一个有用的助手，可以查询天气、计算数学和搜索信息。"));
-        messages.add(ChatMessage.user("帮我查一下北京和上海的天气，然后计算这两个城市温度的平均值"));
+        messages.add(ChatMessage.user("帮我查一下北京的天气"));
         
         // 创建请求
         ChatCompletionRequest request = new ChatCompletionRequest();

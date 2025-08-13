@@ -1,10 +1,10 @@
 package io.github.twwch.openai.sdk;
 
-import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
 import io.github.twwch.openai.sdk.model.chat.ChatMessage;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 测试多模态内容支持

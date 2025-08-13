@@ -7,23 +7,21 @@ import io.github.twwch.openai.sdk.model.ModelInfo;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionChunk;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
-import io.github.twwch.openai.sdk.model.chat.ChatMessage;
 import io.github.twwch.openai.sdk.service.bedrock.BedrockModelAdapter;
 import io.github.twwch.openai.sdk.service.bedrock.BedrockModelAdapterFactory;
 import io.github.twwch.openai.sdk.service.bedrock.BedrockRequestValidator;
 import io.github.twwch.openai.sdk.service.bedrock.auth.BedrockCredentialsIsolator;
-import software.amazon.awssdk.core.SdkBytes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.core.SdkBytes;
+import software.amazon.awssdk.core.exception.SdkServiceException;
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeAsyncClient;
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClient;
 import software.amazon.awssdk.services.bedrockruntime.model.*;
-import software.amazon.awssdk.core.exception.SdkServiceException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 
 /**

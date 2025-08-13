@@ -1,13 +1,12 @@
 package io.github.twwch.openai.sdk.example;
 
 import io.github.twwch.openai.sdk.OpenAI;
+import io.github.twwch.openai.sdk.model.chat.ChatCompletionChunk;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
 import io.github.twwch.openai.sdk.model.chat.ChatMessage;
-import io.github.twwch.openai.sdk.model.chat.ChatCompletionChunk;
 
 import java.util.*;
-import java.util.concurrent.CountDownLatch;
 
 /**
  * Azure OpenAI 工具调用示例

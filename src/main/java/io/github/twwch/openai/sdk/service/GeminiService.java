@@ -3,8 +3,6 @@ package io.github.twwch.openai.sdk.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.twwch.openai.sdk.GeminiConfig;
 import io.github.twwch.openai.sdk.exception.OpenAIException;
 import io.github.twwch.openai.sdk.http.OpenAIHttpClient;
@@ -21,7 +19,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -169,22 +166,6 @@ public class GeminiService {
                 
                 try {
                     ChatCompletionChunk chunk = objectMapper.readValue(data, ChatCompletionChunk.class);
-                    // 处理Gemini可能返回空id的情况
-                    if (chunk.getChoices() != null && !chunk.getChoices().isEmpty()) {
-                        ChatCompletionChunk.Delta delta = chunk.getChoices().get(0).getDelta();
-                        if (delta != null && delta.getToolCalls() != null) {
-                            for (ChatMessage.ToolCall toolCall : delta.getToolCalls()) {
-                                if (toolCall.getId() == null || toolCall.getId().isEmpty()) {
-                                    String generatedId = chunk.getId() != null ? 
-                                        "tool_" + chunk.getId() : 
-                                        "tool_" + System.currentTimeMillis() + "_" + toolCall.getFunction().getName();
-                                    toolCall.setId(generatedId);
-                                    logger.debug("Gemini流式响应中tool_call缺少id，生成id: {}", generatedId);
-                                }
-                            }
-                        }
-                    }
-                    
                     if (onChunk != null) {
                         onChunk.accept(chunk);
                     }
