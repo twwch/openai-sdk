@@ -7,6 +7,7 @@ import io.github.twwch.openai.sdk.model.chat.ChatCompletionRequest;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
 import io.github.twwch.openai.sdk.model.chat.ChatMessage;
 import io.github.twwch.openai.sdk.service.OpenAIService;
+import io.github.twwch.openai.sdk.service.GeminiService;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,6 +21,7 @@ import java.util.function.Consumer;
  */
 public class OpenAI {
     private final OpenAIService service;
+    private final GeminiService geminiService;
 
     /**
      * 使用API密钥创建OpenAI客户端
@@ -95,13 +97,39 @@ public class OpenAI {
     public static OpenAI bedrock(String region, String accessKeyId, String secretAccessKey, String sessionToken, String modelId) {
         return new OpenAI(new BedrockConfig(region, accessKeyId, secretAccessKey, sessionToken, modelId));
     }
+    
+    /**
+     * 创建Gemini客户端
+     * @param apiKey Google AI Studio API密钥
+     * @return Gemini客户端
+     */
+    public static OpenAI gemini(String apiKey) {
+        return new OpenAI(new GeminiConfig(apiKey));
+    }
+    
+    /**
+     * 创建Gemini客户端（带自定义基础URL）
+     * @param apiKey Google AI Studio API密钥
+     * @param baseUrl 自定义API基础URL
+     * @return Gemini客户端
+     */
+    public static OpenAI gemini(String apiKey, String baseUrl) {
+        return new OpenAI(new GeminiConfig(apiKey, baseUrl));
+    }
 
     /**
      * 使用配置创建OpenAI客户端
      * @param config OpenAI配置
      */
     public OpenAI(OpenAIConfig config) {
-        this.service = new OpenAIService(config);
+        // 如果是Gemini配置，创建Gemini服务
+        if (config instanceof GeminiConfig) {
+            this.geminiService = new GeminiService((GeminiConfig) config);
+            this.service = null;
+        } else {
+            this.service = new OpenAIService(config);
+            this.geminiService = null;
+        }
     }
 
     /**
@@ -110,6 +138,10 @@ public class OpenAI {
      * @throws OpenAIException 如果请求失败
      */
     public List<ModelInfo> listModels() throws OpenAIException {
+        if (geminiService != null) {
+            return geminiService.listModels();
+        }
+        assert service != null;
         return service.listModels();
     }
 
@@ -120,6 +152,10 @@ public class OpenAI {
      * @throws OpenAIException 如果请求失败
      */
     public ModelInfo getModel(String modelId) throws OpenAIException {
+        if (geminiService != null) {
+            return geminiService.getModel(modelId);
+        }
+        assert service != null;
         return service.getModel(modelId);
     }
 
@@ -130,6 +166,10 @@ public class OpenAI {
      * @throws OpenAIException 如果请求失败
      */
     public ChatCompletionResponse createChatCompletion(ChatCompletionRequest request) throws OpenAIException {
+        if (geminiService != null) {
+            return geminiService.createChatCompletion(request);
+        }
+        assert service != null;
         return service.createChatCompletion(request);
     }
 
@@ -221,7 +261,12 @@ public class OpenAI {
                                           Consumer<ChatCompletionChunk> onChunk,
                                           Runnable onComplete,
                                           Consumer<Throwable> onError) throws OpenAIException {
-        service.createChatCompletionStream(request, onChunk, onComplete, onError);
+        if (geminiService != null) {
+            geminiService.createChatCompletionStream(request, onChunk, onComplete, onError);
+        } else {
+            assert service != null;
+            service.createChatCompletionStream(request, onChunk, onComplete, onError);
+        }
     }
 
     /**
@@ -242,7 +287,7 @@ public class OpenAI {
                     onChunk.accept(content);
                 }
             },
-            () -> latch.countDown(),
+                latch::countDown,
             e -> {
                 latch.countDown();
                 throw new RuntimeException("流式请求失败", e);

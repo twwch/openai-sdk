@@ -24,7 +24,7 @@ public class ImageUtils {
     // 简单的内存缓存，避免重复下载相同的图片
     private static final ConcurrentHashMap<String, CachedImage> IMAGE_CACHE = new ConcurrentHashMap<>();
     private static final long CACHE_EXPIRY_MS = TimeUnit.HOURS.toMillis(1); // 缓存1小时
-    private static final int MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 最大10MB
+    private static final int MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 最大10MB
     private static final int CONNECT_TIMEOUT = 5000; // 连接超时5秒
     private static final int READ_TIMEOUT = 10000; // 读取超时10秒
     
@@ -238,6 +238,96 @@ public class ImageUtils {
             DOWNLOAD_EXECUTOR.shutdownNow();
             Thread.currentThread().interrupt();
         }
+    }
+    
+    /**
+     * 下载图片并返回字节数组
+     * 
+     * @param imageUrl 图片URL
+     * @return 图片的字节数组
+     * @throws IOException 如果下载失败
+     */
+    public static byte[] downloadImage(String imageUrl) throws IOException {
+        if (imageUrl == null || imageUrl.isEmpty()) {
+            throw new IllegalArgumentException("Image URL cannot be null or empty");
+        }
+        
+        logger.debug("Downloading image from URL: {}", imageUrl);
+        
+        HttpURLConnection connection = null;
+        try {
+            URL url = new URL(imageUrl);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(CONNECT_TIMEOUT);
+            connection.setReadTimeout(READ_TIMEOUT);
+            connection.setRequestProperty("User-Agent", "OpenAI-SDK/1.0");
+            
+            int responseCode = connection.getResponseCode();
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                throw new IOException("Failed to download image. HTTP response code: " + responseCode);
+            }
+            
+            String contentType = connection.getContentType();
+            if (contentType == null || !contentType.startsWith("image/")) {
+                throw new IOException("URL does not point to an image. Content-Type: " + contentType);
+            }
+            
+            int contentLength = connection.getContentLength();
+            if (contentLength > MAX_IMAGE_SIZE) {
+                throw new IOException("Image size exceeds maximum allowed size of " + MAX_IMAGE_SIZE + " bytes");
+            }
+            
+            return readInputStream(connection.getInputStream(), contentLength);
+            
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+    
+    /**
+     * 检测图片的MIME类型
+     * 
+     * @param imageBytes 图片字节数组
+     * @return MIME类型字符串
+     */
+    public static String detectMimeType(byte[] imageBytes) {
+        if (imageBytes == null || imageBytes.length < 4) {
+            return "image/jpeg"; // 默认值
+        }
+        
+        // 检查文件签名（魔术数字）
+        if (imageBytes[0] == (byte) 0xFF && imageBytes[1] == (byte) 0xD8) {
+            return "image/jpeg";
+        } else if (imageBytes[0] == (byte) 0x89 && imageBytes[1] == 0x50 && 
+                   imageBytes[2] == 0x4E && imageBytes[3] == 0x47) {
+            return "image/png";
+        } else if (imageBytes[0] == 0x47 && imageBytes[1] == 0x49 && 
+                   imageBytes[2] == 0x46) {
+            return "image/gif";
+        } else if (imageBytes[0] == 0x42 && imageBytes[1] == 0x4D) {
+            return "image/bmp";
+        } else if ((imageBytes[0] == 0x49 && imageBytes[1] == 0x49 && 
+                    imageBytes[2] == 0x2A && imageBytes[3] == 0x00) ||
+                   (imageBytes[0] == 0x4D && imageBytes[1] == 0x4D && 
+                    imageBytes[2] == 0x00 && imageBytes[3] == 0x2A)) {
+            return "image/tiff";
+        } else if (imageBytes.length > 10 && 
+                   imageBytes[6] == 0x4A && imageBytes[7] == 0x46 && 
+                   imageBytes[8] == 0x49 && imageBytes[9] == 0x46) {
+            return "image/jpeg"; // JFIF format
+        } else if (imageBytes.length > 12 &&
+                   imageBytes[0] == 0x52 && imageBytes[1] == 0x49 &&
+                   imageBytes[2] == 0x46 && imageBytes[3] == 0x46 &&
+                   imageBytes[8] == 0x57 && imageBytes[9] == 0x45 &&
+                   imageBytes[10] == 0x42 && imageBytes[11] == 0x50) {
+            return "image/webp";
+        }
+        
+        // 默认返回JPEG
+        return "image/jpeg";
     }
     
     /**

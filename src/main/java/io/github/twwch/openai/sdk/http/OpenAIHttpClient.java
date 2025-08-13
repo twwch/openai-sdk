@@ -191,6 +191,7 @@ public class OpenAIHttpClient {
         String message = "请求失败，状态码: " + statusCode;
         String errorType = null;
         String errorCode = null;
+        String fullErrorJson = null;
 
         // 记录详细的错误信息
         logger.error("OpenAI API 错误 - 状态码: {}, URL: {}", statusCode, url);
@@ -201,6 +202,9 @@ public class OpenAIHttpClient {
 
         try {
             JsonNode errorJson = objectMapper.readTree(responseBody);
+            // 保存完整的错误JSON字符串
+            fullErrorJson = objectMapper.writeValueAsString(errorJson);
+            
             if (errorJson.has("error")) {
                 JsonNode error = errorJson.get("error");
                 if (error.has("message")) {
@@ -214,13 +218,19 @@ public class OpenAIHttpClient {
                 }
             }
         } catch (Exception e) {
-            // 如果解析失败，使用默认错误消息
+            // 如果解析失败，使用原始响应体作为错误JSON
             logger.debug("解析错误响应失败: {}", responseBody, e);
+            fullErrorJson = responseBody;
         }
 
         // 如果是400错误且涉及tools，添加特殊提示
         if (statusCode == 400 && requestBody != null && requestBody.contains("\"tools\"")) {
             message += " (可能是tools参数格式错误，请检查控制台输出的请求参数)";
+        }
+        
+        // 将完整的错误JSON附加到消息中
+        if (fullErrorJson != null && !fullErrorJson.isEmpty()) {
+            message += "\n详细错误: " + fullErrorJson;
         }
 
         throw new OpenAIException(message, statusCode, errorType, errorCode);

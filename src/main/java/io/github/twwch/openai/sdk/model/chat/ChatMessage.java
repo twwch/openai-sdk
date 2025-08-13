@@ -183,31 +183,50 @@ public class ChatMessage {
     
     /**
      * 创建包含文本和图片的用户消息（便捷方法）
-     * @param text 文本内容
+     * @param text 文本内容（可以为null或空字符串）
      * @param imageUrl 图片URL或base64编码
      * @return 用户消息
      */
     public static ChatMessage userWithImage(String text, String imageUrl) {
-        ContentPart[] parts = new ContentPart[] {
-            ContentPart.text(text),
-            ContentPart.imageUrl(imageUrl)
-        };
-        return new ChatMessage("user", parts);
+        // 根据text是否为空动态创建parts数组
+        if (text != null && !text.trim().isEmpty()) {
+            ContentPart[] parts = new ContentPart[] {
+                ContentPart.text(text),
+                ContentPart.imageUrl(imageUrl)
+            };
+            return new ChatMessage("user", parts);
+        } else {
+            // 只包含图片，不包含文本
+            ContentPart[] parts = new ContentPart[] {
+                ContentPart.imageUrl(imageUrl)
+            };
+            return new ChatMessage("user", parts);
+        }
     }
     
     /**
      * 创建包含多张图片的用户消息（便捷方法）
-     * @param text 文本内容
+     * @param text 文本内容（可以为null或空字符串）
      * @param imageUrls 图片URL或base64编码数组
      * @return 用户消息
      */
     public static ChatMessage userWithImages(String text, String... imageUrls) {
-        ContentPart[] parts = new ContentPart[imageUrls.length + 1];
-        parts[0] = ContentPart.text(text);
-        for (int i = 0; i < imageUrls.length; i++) {
-            parts[i + 1] = ContentPart.imageUrl(imageUrls[i]);
+        // 根据text是否为空动态创建parts数组
+        if (text != null && !text.trim().isEmpty()) {
+            ContentPart[] parts = new ContentPart[imageUrls.length + 1];
+            parts[0] = ContentPart.text(text);
+            for (int i = 0; i < imageUrls.length; i++) {
+                parts[i + 1] = ContentPart.imageUrl(imageUrls[i]);
+            }
+            return new ChatMessage("user", parts);
+        } else {
+            // 只包含图片，不包含文本
+            ContentPart[] parts = new ContentPart[imageUrls.length];
+            for (int i = 0; i < imageUrls.length; i++) {
+                parts[i] = ContentPart.imageUrl(imageUrls[i]);
+            }
+            return new ChatMessage("user", parts);
         }
-        return new ChatMessage("user", parts);
     }
 
     /**

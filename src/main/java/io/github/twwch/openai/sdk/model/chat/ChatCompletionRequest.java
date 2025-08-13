@@ -283,8 +283,10 @@ public class ChatCompletionRequest {
 
     public void setTools(List<Tool> tools) {
         this.tools = tools;
-        // 如果当前模型包含 "o3"，不设置 parallelToolCalls
-        if (this.model != null && this.model.toLowerCase().contains("o3")) {
+        // 如果当前模型包含 "o3" 或 "gemini"，不设置 parallelToolCalls
+        if (this.model != null && 
+            (this.model.toLowerCase().contains("o3") || 
+             this.model.toLowerCase().contains("gemini"))) {
             return;
         }
         // 当设置 tools 时，如果 parallelToolCalls 未设置，则默认为 true
