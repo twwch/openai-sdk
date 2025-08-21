@@ -9,70 +9,89 @@ import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeAsyncClient;
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeAsyncClientBuilder;
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClient;
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClientBuilder;
+import software.amazon.awssdk.http.apache.ApacheHttpClient;
+import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient;
+
+import java.time.Duration;
 
 /**
  * Bedrock凭证隔离器
  * 确保使用指定的AWS凭证，隔离环境凭证
  */
 public class BedrockCredentialsIsolator {
-    
+
     /**
      * 创建隔离的同步客户端
      */
-    public static BedrockRuntimeClient createIsolatedClient(String region, 
-                                                           String accessKeyId, 
-                                                           String secretAccessKey, 
-                                                           String sessionToken) {
-        
+    public static BedrockRuntimeClient createIsolatedClient(String region,
+                                                            String accessKeyId,
+                                                            String secretAccessKey,
+                                                            String sessionToken) {
+
         // 创建标准AWS凭证提供者
         AwsCredentialsProvider credentialsProvider;
         if (sessionToken != null && !sessionToken.isEmpty()) {
             credentialsProvider = StaticCredentialsProvider.create(
-                AwsSessionCredentials.create(accessKeyId, secretAccessKey, sessionToken)
+                    AwsSessionCredentials.create(accessKeyId, secretAccessKey, sessionToken)
             );
         } else {
             credentialsProvider = StaticCredentialsProvider.create(
-                AwsBasicCredentials.create(accessKeyId, secretAccessKey)
+                    AwsBasicCredentials.create(accessKeyId, secretAccessKey)
             );
         }
 
         // 构建隔离的客户端
         BedrockRuntimeClientBuilder builder = BedrockRuntimeClient.builder()
-            .region(Region.of(region))
-            .credentialsProvider(credentialsProvider);
+                .region(Region.of(region))
+                .overrideConfiguration(o -> o.apiCallAttemptTimeout(Duration.ofSeconds(600)))
+                .overrideConfiguration(o -> o.apiCallTimeout(Duration.ofSeconds(600)))
+                .httpClientBuilder(ApacheHttpClient.builder()
+                        .maxConnections(200)
+                        .connectionTimeout(Duration.ofSeconds(600))
+                        .connectionAcquisitionTimeout(Duration.ofSeconds(600))
+                        .socketTimeout(Duration.ofSeconds(600))
+                )
+                .credentialsProvider(credentialsProvider);
 
         return builder.build();
     }
-    
+
     /**
      * 创建隔离的异步客户端
      */
-    public static BedrockRuntimeAsyncClient createIsolatedAsyncClient(String region, 
-                                                                     String accessKeyId, 
-                                                                     String secretAccessKey, 
-                                                                     String sessionToken) {
-        
+    public static BedrockRuntimeAsyncClient createIsolatedAsyncClient(String region,
+                                                                      String accessKeyId,
+                                                                      String secretAccessKey,
+                                                                      String sessionToken) {
+
         // 创建标准AWS凭证提供者
         AwsCredentialsProvider credentialsProvider;
         if (sessionToken != null && !sessionToken.isEmpty()) {
             credentialsProvider = StaticCredentialsProvider.create(
-                AwsSessionCredentials.create(accessKeyId, secretAccessKey, sessionToken)
+                    AwsSessionCredentials.create(accessKeyId, secretAccessKey, sessionToken)
             );
         } else {
             credentialsProvider = StaticCredentialsProvider.create(
-                AwsBasicCredentials.create(accessKeyId, secretAccessKey)
+                    AwsBasicCredentials.create(accessKeyId, secretAccessKey)
             );
         }
-        
+
 
         // 构建隔离的异步客户端
         BedrockRuntimeAsyncClientBuilder builder = BedrockRuntimeAsyncClient.builder()
-            .region(Region.of(region))
-            .credentialsProvider(credentialsProvider);
+                .region(Region.of(region))
+                .overrideConfiguration(o -> o.apiCallAttemptTimeout(Duration.ofSeconds(600)))
+                .overrideConfiguration(o -> o.apiCallTimeout(Duration.ofSeconds(600)))
+                .httpClientBuilder(NettyNioAsyncHttpClient.builder()
+                        .maxConcurrency(200)
+                        .connectionTimeout(Duration.ofSeconds(600))
+                        .connectionAcquisitionTimeout(Duration.ofSeconds(600))
+                        .readTimeout(Duration.ofSeconds(600))
+                )
+                .credentialsProvider(credentialsProvider);
 
         return builder.build();
     }
-    
 
 
 }
