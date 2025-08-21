@@ -29,7 +29,7 @@ import java.util.function.Consumer;
  */
 public class BedrockService {
     private static final Logger logger = LoggerFactory.getLogger(BedrockService.class);
-    
+
     private final BedrockConfig config;
     private final BedrockRuntimeClient client;
     private final BedrockRuntimeAsyncClient asyncClient;
@@ -39,30 +39,30 @@ public class BedrockService {
     public BedrockService(BedrockConfig config) {
         this.config = config;
         this.objectMapper = new ObjectMapper();
-        
+
         logger.debug("初始化Bedrock服务 - 区域: {}, 模型: {}", config.getRegion(), config.getModelId());
-        
+
         // 验证凭证
         validateCredentials();
-        
+
         // 使用隔离器创建客户端，确保完全隔离AWS环境凭证
         this.client = BedrockCredentialsIsolator.createIsolatedClient(
-            config.getRegion(),
-            config.getAccessKeyId(),
-            config.getSecretAccessKey(),
-            config.getSessionToken()
+                config.getRegion(),
+                config.getAccessKeyId(),
+                config.getSecretAccessKey(),
+                config.getSessionToken()
         );
-        
+
         this.asyncClient = BedrockCredentialsIsolator.createIsolatedAsyncClient(
-            config.getRegion(),
-            config.getAccessKeyId(),
-            config.getSecretAccessKey(),
-            config.getSessionToken()
+                config.getRegion(),
+                config.getAccessKeyId(),
+                config.getSecretAccessKey(),
+                config.getSessionToken()
         );
-        
+
         // 创建模型适配器
         this.modelAdapter = BedrockModelAdapterFactory.createAdapter(config.getModelId());
-        
+
         logger.info("Bedrock服务初始化成功 - 使用模型: {}", config.getModelId());
     }
 
@@ -72,11 +72,11 @@ public class BedrockService {
     private void validateCredentials() {
         if (config.getAccessKeyId() == null || config.getSecretAccessKey() == null) {
             throw new IllegalArgumentException(
-                "Bedrock服务需要显式提供AWS凭证。" +
-                "请通过 OpenAI.bedrock(region, accessKeyId, secretAccessKey, modelId) 提供凭证。"
+                    "Bedrock服务需要显式提供AWS凭证。" +
+                            "请通过 OpenAI.bedrock(region, accessKeyId, secretAccessKey, modelId) 提供凭证。"
             );
         }
-        
+
     }
 
     /**
@@ -85,7 +85,7 @@ public class BedrockService {
     public List<ModelInfo> listModels() throws OpenAIException {
         // Bedrock不提供列出模型的API，返回预定义的模型列表
         List<ModelInfo> models = new ArrayList<>();
-        
+
         // Claude模型
         models.add(createModelInfo("anthropic.claude-3-opus-20240229", "anthropic"));
         models.add(createModelInfo("anthropic.claude-3-sonnet-20240229", "anthropic"));
@@ -93,18 +93,18 @@ public class BedrockService {
         models.add(createModelInfo("anthropic.claude-v2:1", "anthropic"));
         models.add(createModelInfo("anthropic.claude-v2", "anthropic"));
         models.add(createModelInfo("anthropic.claude-instant-v1", "anthropic"));
-        
+
         // Llama模型
         models.add(createModelInfo("meta.llama2-13b-chat-v1", "meta"));
         models.add(createModelInfo("meta.llama2-70b-chat-v1", "meta"));
-        
+
         // Amazon Titan模型
         models.add(createModelInfo("amazon.titan-text-express-v1", "amazon"));
         models.add(createModelInfo("amazon.titan-text-lite-v1", "amazon"));
-        
+
         return models;
     }
-    
+
     private ModelInfo createModelInfo(String id, String ownedBy) {
         ModelInfo modelInfo = new ModelInfo();
         modelInfo.setId(id);
@@ -133,20 +133,20 @@ public class BedrockService {
         try {
             // 验证和清理请求参数
             BedrockRequestValidator.validateAndCleanRequest(request);
-            
+
             // 使用配置的模型ID覆盖请求中的模型
             String modelId = config.getModelId();
-            
+
             // 转换请求格式
             bedrockRequest = modelAdapter.convertRequest(request, objectMapper);
-            
+
             // 检查请求大小
             if (bedrockRequest.length() > 100000) {
                 logger.warn("请求体过大: {} bytes，可能超出限制", bedrockRequest.length());
             }
-            
+
             logger.debug("发送Bedrock请求 - 模型: {}, 请求大小: {} bytes", modelId, bedrockRequest.length());
-            
+
             // 调用Bedrock API
             InvokeModelRequest invokeRequest = InvokeModelRequest.builder()
                     .modelId(modelId)
@@ -154,13 +154,13 @@ public class BedrockService {
                     .contentType("application/json")
                     .accept("application/json")
                     .build();
-                    
+
             InvokeModelResponse response = client.invokeModel(invokeRequest);
             String responseBody = response.body().asUtf8String();
-            
+
             // 转换响应格式
             return modelAdapter.convertResponse(responseBody, request, objectMapper);
-            
+
         } catch (Exception e) {
             logger.error("Bedrock请求失败", e);
             if (bedrockRequest != null) {
@@ -180,27 +180,27 @@ public class BedrockService {
      * 创建聊天完成（流式）
      */
     public void createChatCompletionStream(ChatCompletionRequest request,
-                                          Consumer<ChatCompletionChunk> onChunk,
-                                          Runnable onComplete,
-                                          Consumer<Throwable> onError) throws OpenAIException {
+                                           Consumer<ChatCompletionChunk> onChunk,
+                                           Runnable onComplete,
+                                           Consumer<Throwable> onError) throws OpenAIException {
         String bedrockRequest = null;
         try {
             // 验证和清理请求参数
             BedrockRequestValidator.validateAndCleanRequest(request);
-            
+
             // 使用配置的模型ID覆盖请求中的模型
             String modelId = config.getModelId();
-            
+
             // 转换请求格式（流式）
             bedrockRequest = modelAdapter.convertStreamRequest(request, objectMapper);
-            
+
             // 检查请求大小
             if (bedrockRequest.length() > 100000) {
                 logger.warn("请求体过大: {} bytes，可能超出限制", bedrockRequest.length());
             }
-            
+
             logger.debug("发送Bedrock请求 - 模型: {}, 请求大小: {} bytes", modelId, bedrockRequest.length());
-            
+
             // 调用Bedrock流式API
             InvokeModelWithResponseStreamRequest invokeRequest = InvokeModelWithResponseStreamRequest.builder()
                     .modelId(modelId)
@@ -208,14 +208,14 @@ public class BedrockService {
                     .contentType("application/json")
                     .accept("application/json")
                     .build();
-            
+
             // 处理流式响应
             InvokeModelWithResponseStreamResponseHandler responseHandler = InvokeModelWithResponseStreamResponseHandler.builder()
                     .subscriber(responseStream -> {
                         if (responseStream instanceof PayloadPart) {
                             PayloadPart payloadPart = (PayloadPart) responseStream;
                             String chunk = payloadPart.bytes().asUtf8String();
-                            
+                            logger.info("[隔离模式] chunk: {}", chunk);
                             try {
                                 // 转换并发送chunk
                                 List<ChatCompletionChunk> chunks = modelAdapter.convertStreamChunk(chunk, objectMapper);
@@ -230,6 +230,8 @@ public class BedrockService {
                                     onError.accept(new OpenAIException("解析流式响应失败: " + e.getMessage(), e));
                                 }
                             }
+                        } else {
+                            logger.error("未知类型");
                         }
                     })
                     .onComplete(() -> {
@@ -244,9 +246,9 @@ public class BedrockService {
                         }
                     })
                     .build();
-            
+
             asyncClient.invokeModelWithResponseStream(invokeRequest, responseHandler);
-            
+
         } catch (Exception e) {
             logger.error("Bedrock流式请求失败", e);
             if (bedrockRequest != null) {
