@@ -10,6 +10,7 @@ import io.github.twwch.openai.sdk.model.chat.ChatCompletionResponse;
 import io.github.twwch.openai.sdk.service.bedrock.BedrockModelAdapter;
 import io.github.twwch.openai.sdk.service.bedrock.BedrockModelAdapterFactory;
 import io.github.twwch.openai.sdk.service.bedrock.BedrockRequestValidator;
+import io.github.twwch.openai.sdk.service.bedrock.StreamingResponseProcessor;
 import io.github.twwch.openai.sdk.service.bedrock.auth.BedrockCredentialsIsolator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -199,7 +200,12 @@ public class BedrockService {
                 logger.warn("请求体过大: {} bytes，可能超出限制", bedrockRequest.length());
             }
             
-            logger.debug("发送Bedrock请求 - 模型: {}, 请求大小: {} bytes", modelId, bedrockRequest.length());
+            logger.debug("发送Bedrock流式请求 - 模型: {}, 请求大小: {} bytes", modelId, bedrockRequest.length());
+            
+            // 创建流式响应处理器
+            StreamingResponseProcessor processor = new StreamingResponseProcessor(
+                modelAdapter, objectMapper, onChunk, onError
+            );
             
             // 调用Bedrock流式API
             InvokeModelWithResponseStreamRequest invokeRequest = InvokeModelWithResponseStreamRequest.builder()
@@ -215,30 +221,32 @@ public class BedrockService {
                         if (responseStream instanceof PayloadPart) {
                             PayloadPart payloadPart = (PayloadPart) responseStream;
                             String chunk = payloadPart.bytes().asUtf8String();
-                            
-                            try {
-                                // 转换并发送chunk
-                                List<ChatCompletionChunk> chunks = modelAdapter.convertStreamChunk(chunk, objectMapper);
-                                for (ChatCompletionChunk completionChunk : chunks) {
-                                    if (onChunk != null) {
-                                        onChunk.accept(completionChunk);
-                                    }
-                                }
-                            } catch (Exception e) {
-                                logger.error("解析流式响应失败", e);
-                                if (onError != null) {
-                                    onError.accept(new OpenAIException("解析流式响应失败: " + e.getMessage(), e));
-                                }
-                            }
+                            logger.info("[隔离模式] 流式响应: {} " , chunk);
+                            // 使用处理器处理数据块
+                            processor.processChunk(chunk);
+                        }else{
+                            logger.info("[隔离模式] 流式响应: 未知类型 ");
                         }
                     })
                     .onComplete(() -> {
-                        if (onComplete != null) {
-                            onComplete.run();
+                        try {
+                            // 完成处理
+                            processor.complete();
+                            
+                            if (onComplete != null) {
+                                onComplete.run();
+                            }
+                        } finally {
+                            // 清理资源
+                            processor.cleanup();
                         }
                     })
                     .onError(throwable -> {
                         logger.error("Bedrock流式请求失败", throwable);
+                        
+                        // 清理资源
+                        processor.cleanup();
+                        
                         if (onError != null) {
                             onError.accept(new OpenAIException("Bedrock流式请求失败: " + throwable.getMessage(), throwable));
                         }
@@ -249,8 +257,8 @@ public class BedrockService {
             
         } catch (Exception e) {
             logger.error("Bedrock流式请求失败", e);
-            if (bedrockRequest != null) {
-                logger.error("请求体: {}", bedrockRequest);
+            if (bedrockRequest != null && logger.isDebugEnabled()) {
+                logger.debug("请求体: {}", bedrockRequest);
             }
             if (onError != null) {
                 onError.accept(new OpenAIException("Bedrock流式请求失败: " + e.getMessage(), e));
