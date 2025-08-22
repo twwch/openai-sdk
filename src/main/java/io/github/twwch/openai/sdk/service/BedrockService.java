@@ -215,7 +215,6 @@ public class BedrockService {
                         if (responseStream instanceof PayloadPart) {
                             PayloadPart payloadPart = (PayloadPart) responseStream;
                             String chunk = payloadPart.bytes().asUtf8String();
-                            logger.info("[隔离模式] chunk: {}", chunk);
                             try {
                                 // 转换并发送chunk
                                 List<ChatCompletionChunk> chunks = modelAdapter.convertStreamChunk(chunk, objectMapper);
