@@ -32,6 +32,11 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
         // 必须设置的参数
         bedrockRequest.put("anthropic_version", "bedrock-2023-05-31");
         
+        // 添加 anthropic_beta 参数以支持细粒度工具流式传输
+        ArrayNode betaFeatures = objectMapper.createArrayNode();
+        betaFeatures.add("fine-grained-tool-streaming-2025-05-14");
+        bedrockRequest.set("anthropic_beta", betaFeatures);
+        
         // 转换消息格式
         List<ChatMessage> messages = request.getMessages();
         StringBuilder systemPrompt = new StringBuilder();

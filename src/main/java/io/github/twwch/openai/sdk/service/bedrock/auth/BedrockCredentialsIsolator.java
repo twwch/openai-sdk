@@ -43,13 +43,13 @@ public class BedrockCredentialsIsolator {
         // 构建隔离的客户端
         BedrockRuntimeClientBuilder builder = BedrockRuntimeClient.builder()
                 .region(Region.of(region))
-                .overrideConfiguration(o -> o.apiCallAttemptTimeout(Duration.ofSeconds(600)))
-                .overrideConfiguration(o -> o.apiCallTimeout(Duration.ofSeconds(600)))
+                .overrideConfiguration(o -> o.apiCallAttemptTimeout(Duration.ofSeconds(30)))
+                .overrideConfiguration(o -> o.apiCallTimeout(Duration.ofSeconds(60)))
                 .httpClientBuilder(ApacheHttpClient.builder()
                         .maxConnections(200)
-                        .connectionTimeout(Duration.ofSeconds(600))
-                        .connectionAcquisitionTimeout(Duration.ofSeconds(600))
-                        .socketTimeout(Duration.ofSeconds(600))
+                        .connectionTimeout(Duration.ofSeconds(30))
+                        .connectionAcquisitionTimeout(Duration.ofSeconds(30))
+                        .socketTimeout(Duration.ofSeconds(60))
                 )
                 .credentialsProvider(credentialsProvider);
 
@@ -80,13 +80,13 @@ public class BedrockCredentialsIsolator {
         // 构建隔离的异步客户端
         BedrockRuntimeAsyncClientBuilder builder = BedrockRuntimeAsyncClient.builder()
                 .region(Region.of(region))
-                .overrideConfiguration(o -> o.apiCallAttemptTimeout(Duration.ofSeconds(600)))
-                .overrideConfiguration(o -> o.apiCallTimeout(Duration.ofSeconds(600)))
+                .overrideConfiguration(o -> o.apiCallAttemptTimeout(Duration.ofSeconds(30)))
+                .overrideConfiguration(o -> o.apiCallTimeout(Duration.ofSeconds(60)))
                 .httpClientBuilder(NettyNioAsyncHttpClient.builder()
                         .maxConcurrency(200)
-                        .connectionTimeout(Duration.ofSeconds(600))
-                        .connectionAcquisitionTimeout(Duration.ofSeconds(600))
-                        .readTimeout(Duration.ofSeconds(600))
+                        .connectionTimeout(Duration.ofSeconds(30))
+                        .connectionAcquisitionTimeout(Duration.ofSeconds(30))
+                        .readTimeout(Duration.ofSeconds(60))
                 )
                 .credentialsProvider(credentialsProvider);
 
