@@ -78,16 +78,18 @@ public class BedrockCredentialsIsolator {
 
 
         // 构建隔离的异步客户端
+        // 流式请求需要更长的超时时间，因为响应可能持续较长时间
         BedrockRuntimeAsyncClientBuilder builder = BedrockRuntimeAsyncClient.builder()
                 .region(Region.of(region))
-                .overrideConfiguration(o -> o.apiCallAttemptTimeout(Duration.ofSeconds(30)))
-                .overrideConfiguration(o -> o.apiCallTimeout(Duration.ofSeconds(60)))
-                .httpClientBuilder(NettyNioAsyncHttpClient.builder()
-                        .maxConcurrency(200)
-                        .connectionTimeout(Duration.ofSeconds(30))
-                        .connectionAcquisitionTimeout(Duration.ofSeconds(30))
-                        .readTimeout(Duration.ofSeconds(60))
-                )
+//                .overrideConfiguration(o -> o
+//                        .apiCallAttemptTimeout(Duration.ofMinutes(5))  // 单次尝试超时：5分钟
+//                        .apiCallTimeout(Duration.ofMinutes(10)))       // 总超时：10分钟（适合长流式响应）
+//                .httpClientBuilder(NettyNioAsyncHttpClient.builder()
+//                        .maxConcurrency(200)
+//                        .connectionTimeout(Duration.ofSeconds(30))     // 连接超时保持30秒
+//                        .connectionAcquisitionTimeout(Duration.ofSeconds(30))
+//                        .readTimeout(Duration.ofMinutes(5))            // 读取超时：5分钟（流式需要更长）
+//                )
                 .credentialsProvider(credentialsProvider);
 
         return builder.build();
