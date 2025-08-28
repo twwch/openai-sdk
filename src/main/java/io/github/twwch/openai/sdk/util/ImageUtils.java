@@ -3,6 +3,14 @@ package io.github.twwch.openai.sdk.util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -10,6 +18,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
@@ -24,7 +33,7 @@ public class ImageUtils {
     // 简单的内存缓存，避免重复下载相同的图片
     private static final ConcurrentHashMap<String, CachedImage> IMAGE_CACHE = new ConcurrentHashMap<>();
     private static final long CACHE_EXPIRY_MS = TimeUnit.HOURS.toMillis(1); // 缓存1小时
-    private static final int MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 最大10MB
+    private static final int MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 最大5MB
     private static final int CONNECT_TIMEOUT = 5000; // 连接超时5秒
     private static final int READ_TIMEOUT = 10000; // 读取超时10秒
     
@@ -79,14 +88,20 @@ public class ImageUtils {
                 throw new IOException("URL does not point to an image. Content-Type: " + contentType);
             }
             
-            // 获取文件大小
+            // 获取文件大小（注意：这里不再限制下载，因为我们可以压缩）
             int contentLength = connection.getContentLength();
-            if (contentLength > MAX_IMAGE_SIZE) {
-                throw new IOException("Image size exceeds maximum allowed size of " + MAX_IMAGE_SIZE + " bytes");
+            if (contentLength > MAX_IMAGE_SIZE * 2) {
+                logger.warn("Image size {} bytes is very large, will attempt compression", contentLength);
             }
             
             // 读取图片数据
             byte[] imageData = readInputStream(connection.getInputStream(), contentLength);
+            
+            // 如果图片超过5MB，进行压缩
+            if (imageData.length > MAX_IMAGE_SIZE) {
+                imageData = compressImage(imageData, MAX_IMAGE_SIZE);
+                logger.info("Image compressed for URL: {}", imageUrl);
+            }
             
             // 转换为base64
             String base64 = Base64.getEncoder().encodeToString(imageData);
@@ -123,9 +138,9 @@ public class ImageUtils {
             buffer.write(data, 0, nRead);
             totalRead += nRead;
             
-            // 防止读取过大的文件
-            if (totalRead > MAX_IMAGE_SIZE) {
-                throw new IOException("Image size exceeds maximum allowed size");
+            // 防止读取过大的文件（允许稍大的文件，因为我们会压缩）
+            if (totalRead > MAX_IMAGE_SIZE * 3) {
+                throw new IOException("Image size exceeds maximum allowed size for processing");
             }
         }
         
@@ -274,11 +289,19 @@ public class ImageUtils {
             }
             
             int contentLength = connection.getContentLength();
-            if (contentLength > MAX_IMAGE_SIZE) {
-                throw new IOException("Image size exceeds maximum allowed size of " + MAX_IMAGE_SIZE + " bytes");
+            if (contentLength > MAX_IMAGE_SIZE * 2) {
+                logger.warn("Image size {} bytes is very large", contentLength);
             }
             
-            return readInputStream(connection.getInputStream(), contentLength);
+            byte[] imageData = readInputStream(connection.getInputStream(), contentLength);
+            
+            // 如果图片超过5MB，进行压缩
+            if (imageData.length > MAX_IMAGE_SIZE) {
+                imageData = compressImage(imageData, MAX_IMAGE_SIZE);
+                logger.info("Image compressed from {} bytes", imageData.length);
+            }
+            
+            return imageData;
             
         } finally {
             if (connection != null) {
@@ -328,6 +351,218 @@ public class ImageUtils {
         
         // 默认返回JPEG
         return "image/jpeg";
+    }
+    
+    /**
+     * 压缩图片到指定大小以下
+     * 
+     * @param imageBytes 原始图片字节数组
+     * @param maxSizeBytes 最大字节数
+     * @return 压缩后的图片字节数组
+     */
+    public static byte[] compressImage(byte[] imageBytes, int maxSizeBytes) {
+        if (imageBytes == null || imageBytes.length <= maxSizeBytes) {
+            return imageBytes;
+        }
+        
+        logger.info("Image size {} bytes exceeds limit {} bytes, compressing...", imageBytes.length, maxSizeBytes);
+        
+        try {
+            // 读取原始图片
+            BufferedImage originalImage = ImageIO.read(new ByteArrayInputStream(imageBytes));
+            if (originalImage == null) {
+                logger.error("Failed to read image for compression");
+                return imageBytes;
+            }
+            
+            // 检测图片格式
+            String format = detectImageFormat(imageBytes);
+            
+            // 初始压缩质量
+            float quality = 0.9f;
+            byte[] compressedBytes = imageBytes;
+            
+            // 逐步降低质量直到满足大小要求
+            while (compressedBytes.length > maxSizeBytes && quality > 0.1f) {
+                compressedBytes = compressWithQuality(originalImage, format, quality);
+                
+                if (compressedBytes.length > maxSizeBytes) {
+                    // 如果压缩后仍然太大，降低质量
+                    quality -= 0.1f;
+                    
+                    // 如果质量已经很低但仍然太大，尝试缩放图片
+                    if (quality <= 0.3f && compressedBytes.length > maxSizeBytes) {
+                        // 计算缩放比例
+                        double scale = Math.sqrt((double) maxSizeBytes / compressedBytes.length);
+                        if (scale < 1.0) {
+                            int newWidth = (int) (originalImage.getWidth() * scale);
+                            int newHeight = (int) (originalImage.getHeight() * scale);
+                            
+                            // 缩放图片
+                            BufferedImage scaledImage = resizeImage(originalImage, newWidth, newHeight);
+                            originalImage = scaledImage;
+                            
+                            // 重置质量并重新压缩
+                            quality = 0.8f;
+                            compressedBytes = compressWithQuality(originalImage, format, quality);
+                            
+                            logger.info("Resized image to {}x{} for compression", newWidth, newHeight);
+                        }
+                    }
+                }
+            }
+            
+            logger.info("Image compressed from {} bytes to {} bytes (quality: {})", 
+                imageBytes.length, compressedBytes.length, quality);
+            
+            return compressedBytes;
+            
+        } catch (Exception e) {
+            logger.error("Failed to compress image", e);
+            return imageBytes; // 返回原始图片
+        }
+    }
+    
+    /**
+     * 使用指定质量压缩图片
+     */
+    private static byte[] compressWithQuality(BufferedImage image, String format, float quality) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        
+        // 对于JPEG格式，使用质量压缩
+        if ("jpeg".equalsIgnoreCase(format) || "jpg".equalsIgnoreCase(format)) {
+            Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpg");
+            if (writers.hasNext()) {
+                ImageWriter writer = writers.next();
+                ImageOutputStream ios = ImageIO.createImageOutputStream(baos);
+                writer.setOutput(ios);
+                
+                ImageWriteParam param = writer.getDefaultWriteParam();
+                if (param.canWriteCompressed()) {
+                    param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+                    param.setCompressionQuality(quality);
+                }
+                
+                // 如果图片有透明通道，需要转换为RGB
+                BufferedImage rgbImage = image;
+                if (image.getTransparency() != BufferedImage.OPAQUE) {
+                    rgbImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
+                    Graphics2D g = rgbImage.createGraphics();
+                    g.setColor(Color.WHITE);
+                    g.fillRect(0, 0, image.getWidth(), image.getHeight());
+                    g.drawImage(image, 0, 0, null);
+                    g.dispose();
+                }
+                
+                writer.write(null, new IIOImage(rgbImage, null, null), param);
+                ios.close();
+                writer.dispose();
+            } else {
+                // 如果没有JPEG writer，使用默认方式
+                ImageIO.write(image, format, baos);
+            }
+        } else {
+            // 对于其他格式（PNG等），直接写入（PNG是无损压缩）
+            ImageIO.write(image, format, baos);
+        }
+        
+        return baos.toByteArray();
+    }
+    
+    /**
+     * 缩放图片
+     */
+    private static BufferedImage resizeImage(BufferedImage originalImage, int targetWidth, int targetHeight) {
+        BufferedImage resizedImage = new BufferedImage(targetWidth, targetHeight, 
+            originalImage.getType() == 0 ? BufferedImage.TYPE_INT_ARGB : originalImage.getType());
+        
+        Graphics2D g = resizedImage.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        
+        g.drawImage(originalImage, 0, 0, targetWidth, targetHeight, null);
+        g.dispose();
+        
+        return resizedImage;
+    }
+    
+    /**
+     * 检测图片格式
+     */
+    private static String detectImageFormat(byte[] imageBytes) {
+        String mimeType = detectMimeType(imageBytes);
+        
+        // 从MIME类型提取格式
+        if (mimeType.startsWith("image/")) {
+            String format = mimeType.substring(6); // 移除 "image/" 前缀
+            
+            // 标准化格式名称
+            if ("jpeg".equalsIgnoreCase(format)) {
+                return "jpg";
+            }
+            return format.toLowerCase();
+        }
+        
+        return "jpg"; // 默认JPEG
+    }
+    
+    /**
+     * 压缩Base64编码的图片
+     * 
+     * @param base64Data Base64编码的图片数据（包含或不包含data URI前缀）
+     * @param maxSizeBytes 最大字节数
+     * @return 压缩后的Base64编码图片数据（保持原有的data URI前缀格式）
+     */
+    public static String compressBase64Image(String base64Data, int maxSizeBytes) {
+        if (base64Data == null || base64Data.isEmpty()) {
+            return base64Data;
+        }
+        
+        try {
+            String base64Content;
+            String prefix = "";
+            
+            // 解析data URI格式
+            if (base64Data.startsWith("data:image/")) {
+                String[] parts = base64Data.split(",", 2);
+                if (parts.length == 2) {
+                    prefix = parts[0] + ",";
+                    base64Content = parts[1];
+                } else {
+                    return base64Data;
+                }
+            } else {
+                base64Content = base64Data;
+            }
+            
+            // 解码Base64
+            byte[] imageBytes = Base64.getDecoder().decode(base64Content);
+            
+            // 检查是否需要压缩
+            if (imageBytes.length <= maxSizeBytes) {
+                return base64Data;
+            }
+            
+            // 压缩图片
+            byte[] compressedBytes = compressImage(imageBytes, maxSizeBytes);
+            
+            // 重新编码为Base64
+            String compressedBase64 = Base64.getEncoder().encodeToString(compressedBytes);
+            
+            // 如果原始数据有data URI前缀，保持相同格式（可能需要更新MIME类型）
+            if (!prefix.isEmpty()) {
+                // 检测压缩后的格式
+                String mimeType = detectMimeType(compressedBytes);
+                return "data:" + mimeType + ";base64," + compressedBase64;
+            }
+            
+            return compressedBase64;
+            
+        } catch (Exception e) {
+            logger.error("Failed to compress base64 image", e);
+            return base64Data; // 返回原始数据
+        }
     }
     
     /**

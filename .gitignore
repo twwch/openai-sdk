@@ -100,3 +100,5 @@ check-repo-settings.md
 *-key.txt
 *-key-base64.txt
 simple_streaming_test.py
+
+demo*

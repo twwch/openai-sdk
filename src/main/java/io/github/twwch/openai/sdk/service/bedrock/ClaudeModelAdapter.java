@@ -146,10 +146,13 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                                 
                                 String base64Data = null;
                                 if (url.startsWith("data:image/")) {
-                                    // 已经是base64编码的图片
-                                    base64Data = url;
+                                    // 已经是base64编码的图片，检查是否需要压缩
+                                    base64Data = ImageUtils.compressBase64Image(url, 5 * 1024 * 1024);
+                                    if (!base64Data.equals(url)) {
+                                        logger.info("Compressed base64 image for Claude");
+                                    }
                                 } else {
-                                    // 从downloadedImages中获取已下载的图片
+                                    // 从downloadedImages中获取已下载的图片（已经在下载时压缩过了）
                                     base64Data = downloadedImages.get(url);
                                     if (base64Data == null) {
                                         logger.error("Failed to download image: {}", url);
