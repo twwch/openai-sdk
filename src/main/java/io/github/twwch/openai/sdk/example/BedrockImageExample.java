@@ -26,11 +26,6 @@ public class BedrockImageExample {
             region = "us-east-2"; // 默认区域
         }
         
-        if (accessKeyId == null || secretAccessKey == null) {
-            System.err.println("请设置环境变量 AWS_ACCESS_KEY_ID 和 AWS_SECRET_ACCESS_KEY");
-            System.err.println("或者使用AWS配置文件/IAM角色");
-        }
-        
         // 使用Claude 3 Sonnet模型（支持图片）
         String modelId = "us.anthropic.claude-3-7-sonnet-20250219-v1:0";
         
@@ -41,13 +36,13 @@ public class BedrockImageExample {
         testSingleUrlImage(bedrockClient, modelId);
         
         // 示例2：分析Base64编码的图片
-        testBase64Image(bedrockClient, modelId);
-        
-        // 示例3：并发分析多张图片
-        testMultipleImagesConcurrent(bedrockClient, modelId);
-        
-        // 示例4：图片与文本混合分析
-        testMixedContent(bedrockClient, modelId);
+//        testBase64Image(bedrockClient, modelId);
+//
+//        // 示例3：并发分析多张图片
+//        testMultipleImagesConcurrent(bedrockClient, modelId);
+//
+//        // 示例4：图片与文本混合分析
+//        testMixedContent(bedrockClient, modelId);
     }
     
     /**
@@ -59,7 +54,7 @@ public class BedrockImageExample {
         
         ChatMessage.ContentPart[] parts = new ChatMessage.ContentPart[] {
             ChatMessage.ContentPart.text("请详细描述这张自然风景图片，包括天气、时间、景色特点等。"),
-            ChatMessage.ContentPart.imageUrl("https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/640px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg")
+            ChatMessage.ContentPart.imageUrl("https://cdn-aws.iweaver.ai/docx/2025/08/28/9033ff93-7ef4-42e7-a507-3584e0280cc7/哲风壁纸_天空草地-少年奔跑.png")
         };
         
         ChatMessage message = new ChatMessage();

@@ -147,7 +147,8 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                                 String base64Data = null;
                                 if (url.startsWith("data:image/")) {
                                     // 已经是base64编码的图片，检查是否需要压缩
-                                    base64Data = ImageUtils.compressBase64Image(url, 5 * 1024 * 1024);
+                                    // Bedrock限制是5MB，但这是base64编码后的大小，所以目标应该更小
+                                    base64Data = ImageUtils.compressBase64Image(url, 4 * 1024 * 1024); // 压缩到4MB以内
                                     if (!base64Data.equals(url)) {
                                         logger.info("Compressed base64 image for Claude");
                                     }

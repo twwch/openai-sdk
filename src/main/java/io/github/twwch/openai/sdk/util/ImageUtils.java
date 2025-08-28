@@ -99,8 +99,10 @@ public class ImageUtils {
             
             // 如果图片超过5MB，进行压缩
             if (imageData.length > MAX_IMAGE_SIZE) {
-                imageData = compressImage(imageData, MAX_IMAGE_SIZE);
-                logger.info("Image compressed for URL: {}", imageUrl);
+                logger.info("Image size {} bytes exceeds 5MB limit, compressing...", imageData.length);
+                byte[] compressedData = compressImage(imageData, MAX_IMAGE_SIZE - 100000); // 留100KB余量，确保base64编码后不超限
+                logger.info("Successfully compressed image from {} bytes to {} bytes", imageData.length, compressedData.length);
+                imageData = compressedData;
             }
             
             // 转换为base64
@@ -297,8 +299,9 @@ public class ImageUtils {
             
             // 如果图片超过5MB，进行压缩
             if (imageData.length > MAX_IMAGE_SIZE) {
-                imageData = compressImage(imageData, MAX_IMAGE_SIZE);
-                logger.info("Image compressed from {} bytes", imageData.length);
+                int originalSize = imageData.length;
+                imageData = compressImage(imageData, MAX_IMAGE_SIZE - 100000); // 留100KB余量
+                logger.info("Image compressed from {} bytes to {} bytes", originalSize, imageData.length);
             }
             
             return imageData;
@@ -383,31 +386,41 @@ public class ImageUtils {
             byte[] compressedBytes = imageBytes;
             
             // 逐步降低质量直到满足大小要求
-            while (compressedBytes.length > maxSizeBytes && quality > 0.1f) {
-                compressedBytes = compressWithQuality(originalImage, format, quality);
+            int attemptCount = 0;
+            while (compressedBytes.length > maxSizeBytes && attemptCount < 10) {
+                attemptCount++;
                 
-                if (compressedBytes.length > maxSizeBytes) {
-                    // 如果压缩后仍然太大，降低质量
+                if (quality > 0.2f) {
+                    // 先尝试降低质量
                     quality -= 0.1f;
+                    compressedBytes = compressWithQuality(originalImage, format, quality);
+                    logger.debug("Attempt {}: Compressed with quality {} - size: {} bytes", 
+                        attemptCount, quality, compressedBytes.length);
+                } else {
+                    // 如果质量已经很低但仍然太大，需要缩放图片
+                    double scale = Math.sqrt((double) maxSizeBytes / compressedBytes.length) * 0.9; // 留一点余量
+                    if (scale < 0.1) {
+                        scale = 0.1; // 最小缩放到10%
+                    }
                     
-                    // 如果质量已经很低但仍然太大，尝试缩放图片
-                    if (quality <= 0.3f && compressedBytes.length > maxSizeBytes) {
-                        // 计算缩放比例
-                        double scale = Math.sqrt((double) maxSizeBytes / compressedBytes.length);
-                        if (scale < 1.0) {
-                            int newWidth = (int) (originalImage.getWidth() * scale);
-                            int newHeight = (int) (originalImage.getHeight() * scale);
-                            
-                            // 缩放图片
-                            BufferedImage scaledImage = resizeImage(originalImage, newWidth, newHeight);
-                            originalImage = scaledImage;
-                            
-                            // 重置质量并重新压缩
-                            quality = 0.8f;
-                            compressedBytes = compressWithQuality(originalImage, format, quality);
-                            
-                            logger.info("Resized image to {}x{} for compression", newWidth, newHeight);
-                        }
+                    int newWidth = Math.max(100, (int) (originalImage.getWidth() * scale));
+                    int newHeight = Math.max(100, (int) (originalImage.getHeight() * scale));
+                    
+                    // 缩放图片
+                    BufferedImage scaledImage = resizeImage(originalImage, newWidth, newHeight);
+                    originalImage = scaledImage;
+                    
+                    // 重置质量并重新压缩
+                    quality = 0.5f;
+                    compressedBytes = compressWithQuality(originalImage, format, quality);
+                    
+                    logger.info("Resized image to {}x{} for compression, new size: {} bytes", 
+                        newWidth, newHeight, compressedBytes.length);
+                    
+                    // 如果缩放后还是太大，继续降低质量
+                    if (compressedBytes.length > maxSizeBytes) {
+                        quality = 0.2f;
+                        compressedBytes = compressWithQuality(originalImage, format, quality);
                     }
                 }
             }
@@ -544,8 +557,9 @@ public class ImageUtils {
                 return base64Data;
             }
             
-            // 压缩图片
-            byte[] compressedBytes = compressImage(imageBytes, maxSizeBytes);
+            // 压缩图片（考虑base64编码后会增大约33%）
+            int targetSize = (int)(maxSizeBytes * 0.75); // 留出base64编码的空间
+            byte[] compressedBytes = compressImage(imageBytes, targetSize);
             
             // 重新编码为Base64
             String compressedBase64 = Base64.getEncoder().encodeToString(compressedBytes);
