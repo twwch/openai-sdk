@@ -33,7 +33,8 @@ public class ImageUtils {
     // 简单的内存缓存，避免重复下载相同的图片
     private static final ConcurrentHashMap<String, CachedImage> IMAGE_CACHE = new ConcurrentHashMap<>();
     private static final long CACHE_EXPIRY_MS = TimeUnit.HOURS.toMillis(1); // 缓存1小时
-    private static final int MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 最大5MB
+    private static final int MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 压缩目标大小5MB
+    private static final int MAX_DOWNLOAD_SIZE = Integer.parseInt(System.getProperty("openai.sdk.max.download.size", String.valueOf(50 * 1024 * 1024))); // 最大下载50MB，可通过系统属性配置
     private static final int CONNECT_TIMEOUT = 5000; // 连接超时5秒
     private static final int READ_TIMEOUT = 10000; // 读取超时10秒
     
@@ -88,10 +89,15 @@ public class ImageUtils {
                 throw new IOException("URL does not point to an image. Content-Type: " + contentType);
             }
             
-            // 获取文件大小（注意：这里不再限制下载，因为我们可以压缩）
+            // 获取文件大小
             int contentLength = connection.getContentLength();
-            if (contentLength > MAX_IMAGE_SIZE * 2) {
-                logger.warn("Image size {} bytes is very large, will attempt compression", contentLength);
+            if (contentLength > MAX_DOWNLOAD_SIZE) {
+                throw new IOException(String.format("Image size %d MB exceeds maximum allowed size %d MB for downloading", 
+                    contentLength / (1024 * 1024), MAX_DOWNLOAD_SIZE / (1024 * 1024)));
+            }
+            if (contentLength > MAX_IMAGE_SIZE) {
+                logger.warn("Image size {} MB is large, will attempt compression to {} MB", 
+                    contentLength / (1024 * 1024), MAX_IMAGE_SIZE / (1024 * 1024));
             }
             
             // 读取图片数据
@@ -140,9 +146,10 @@ public class ImageUtils {
             buffer.write(data, 0, nRead);
             totalRead += nRead;
             
-            // 防止读取过大的文件（允许稍大的文件，因为我们会压缩）
-            if (totalRead > MAX_IMAGE_SIZE * 3) {
-                throw new IOException("Image size exceeds maximum allowed size for processing");
+            // 防止读取过大的文件
+            if (totalRead > MAX_DOWNLOAD_SIZE) {
+                throw new IOException(String.format("Image size %d MB exceeds maximum allowed size %d MB for processing", 
+                    totalRead / (1024 * 1024), MAX_DOWNLOAD_SIZE / (1024 * 1024)));
             }
         }
         
@@ -291,8 +298,13 @@ public class ImageUtils {
             }
             
             int contentLength = connection.getContentLength();
-            if (contentLength > MAX_IMAGE_SIZE * 2) {
-                logger.warn("Image size {} bytes is very large", contentLength);
+            if (contentLength > MAX_DOWNLOAD_SIZE) {
+                throw new IOException(String.format("Image size %d MB exceeds maximum allowed size %d MB for downloading", 
+                    contentLength / (1024 * 1024), MAX_DOWNLOAD_SIZE / (1024 * 1024)));
+            }
+            if (contentLength > MAX_IMAGE_SIZE) {
+                logger.warn("Image size {} MB is large, will compress to {} MB", 
+                    contentLength / (1024 * 1024), MAX_IMAGE_SIZE / (1024 * 1024));
             }
             
             byte[] imageData = readInputStream(connection.getInputStream(), contentLength);
