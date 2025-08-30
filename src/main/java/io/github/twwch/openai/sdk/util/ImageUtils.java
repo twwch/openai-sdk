@@ -58,6 +58,9 @@ public class ImageUtils {
             throw new IllegalArgumentException("Image URL cannot be null or empty");
         }
         
+        // Trim whitespace from URL
+        imageUrl = imageUrl.trim();
+        
         // 检查缓存
         CachedImage cached = IMAGE_CACHE.get(imageUrl);
         if (cached != null && !cached.isExpired()) {
@@ -92,23 +95,43 @@ public class ImageUtils {
             // 获取文件大小
             int contentLength = connection.getContentLength();
             if (contentLength > MAX_DOWNLOAD_SIZE) {
+                logger.error("Image size {} MB exceeds maximum allowed size {} MB for downloading", 
+                    contentLength / (1024 * 1024), MAX_DOWNLOAD_SIZE / (1024 * 1024));
                 throw new IOException(String.format("Image size %d MB exceeds maximum allowed size %d MB for downloading", 
                     contentLength / (1024 * 1024), MAX_DOWNLOAD_SIZE / (1024 * 1024)));
             }
             if (contentLength > MAX_IMAGE_SIZE) {
-                logger.warn("Image size {} MB is large, will attempt compression to {} MB", 
+                logger.info("Image size {} MB exceeds target size {} MB, will download and compress", 
                     contentLength / (1024 * 1024), MAX_IMAGE_SIZE / (1024 * 1024));
             }
             
-            // 读取图片数据
-            byte[] imageData = readInputStream(connection.getInputStream(), contentLength);
+            // 读取图片数据 - 允许读取大文件以便后续压缩
+            logger.debug("Starting to download image, expected size: {} bytes", contentLength);
+            byte[] imageData = readInputStream(connection.getInputStream(), contentLength, MAX_DOWNLOAD_SIZE);
+            
+            logger.info("Successfully downloaded image, actual size: {} bytes", imageData.length);
             
             // 如果图片超过5MB，进行压缩
             if (imageData.length > MAX_IMAGE_SIZE) {
-                logger.info("Image size {} bytes exceeds 5MB limit, compressing...", imageData.length);
-                byte[] compressedData = compressImage(imageData, MAX_IMAGE_SIZE - 100000); // 留100KB余量，确保base64编码后不超限
-                logger.info("Successfully compressed image from {} bytes to {} bytes", imageData.length, compressedData.length);
-                imageData = compressedData;
+                logger.info("Image size {} MB exceeds target size {} MB, attempting compression...", 
+                    imageData.length / (1024 * 1024), MAX_IMAGE_SIZE / (1024 * 1024));
+                try {
+                    byte[] compressedData = compressImage(imageData, MAX_IMAGE_SIZE - 100000); // 留100KB余量，确保base64编码后不超限
+                    if (compressedData != null && compressedData.length > 0) {
+                        if (compressedData.length < imageData.length) {
+                            logger.info("Successfully compressed image from {} MB to {} MB", 
+                                imageData.length / (1024 * 1024), compressedData.length / (1024 * 1024));
+                            imageData = compressedData;
+                        } else {
+                            logger.warn("Compression did not reduce size, using original image");
+                        }
+                    } else {
+                        logger.error("Compression returned null or empty data, using original image");
+                    }
+                } catch (Exception e) {
+                    logger.error("Error during compression, using original image: {}", e.getMessage());
+                    // 继续使用原始图片
+                }
             }
             
             // 转换为base64
@@ -125,7 +148,16 @@ public class ImageUtils {
             
             return result;
             
-        } finally {
+        }
+        catch (IOException e){
+            logger.error("IOException downloading image from URL: {}", imageUrl, e);
+            throw e; // 重新抛出IOException
+        }
+        catch (Exception e){
+            logger.error("Unexpected error downloading image from URL: {}", imageUrl, e);
+            throw new IOException("Failed to download and convert image: " + e.getMessage(), e);
+        }
+        finally {
             if (connection != null) {
                 connection.disconnect();
             }
@@ -134,22 +166,34 @@ public class ImageUtils {
     
     /**
      * 从输入流读取数据
+     * @param inputStream 输入流
+     * @param expectedLength 预期长度（可能为-1）
+     * @param maxSize 最大允许大小
      */
-    private static byte[] readInputStream(InputStream inputStream, int expectedLength) throws IOException {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+    private static byte[] readInputStream(InputStream inputStream, int expectedLength, int maxSize) throws IOException {
+        // 如果知道预期大小，使用它来初始化缓冲区
+        ByteArrayOutputStream buffer = expectedLength > 0 ? 
+            new ByteArrayOutputStream(expectedLength) : new ByteArrayOutputStream();
         
         int nRead;
-        byte[] data = new byte[8192];
+        byte[] data = new byte[16384]; // 增大缓冲区以提高读取效率
         int totalRead = 0;
         
         while ((nRead = inputStream.read(data, 0, data.length)) != -1) {
             buffer.write(data, 0, nRead);
             totalRead += nRead;
             
+            // 每读取1MB打印一次进度日志
+            if (totalRead % (1024 * 1024) == 0) {
+                logger.debug("Downloaded {} MB so far...", totalRead / (1024 * 1024));
+            }
+            
             // 防止读取过大的文件
-            if (totalRead > MAX_DOWNLOAD_SIZE) {
+            if (totalRead > maxSize) {
+                logger.error("Image size {} MB exceeds maximum allowed size {} MB", 
+                    totalRead / (1024 * 1024), maxSize / (1024 * 1024));
                 throw new IOException(String.format("Image size %d MB exceeds maximum allowed size %d MB for processing", 
-                    totalRead / (1024 * 1024), MAX_DOWNLOAD_SIZE / (1024 * 1024)));
+                    totalRead / (1024 * 1024), maxSize / (1024 * 1024)));
             }
         }
         
@@ -216,11 +260,24 @@ public class ImageUtils {
         for (String url : uniqueUrls) {
             CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                 try {
-                    String base64Data = downloadAndConvertToBase64(url);
-                    results.put(url, base64Data);
-                } catch (Exception e) {
-                    logger.error("Failed to download image: {}", url, e);
+                    String trimmedUrl = url.trim(); // 确保URL没有空格
+                    String base64Data = downloadAndConvertToBase64(trimmedUrl);
+                    if (base64Data != null) {
+                        // 使用原始URL作为key，以便调用者能找到结果
+                        results.put(url, base64Data);
+                        logger.debug("Successfully downloaded and converted image: {}", trimmedUrl);
+                    }
+                } catch (IOException e) {
+                    // 详细记录IOException
+                    if (e.getMessage() != null && e.getMessage().contains("exceeds maximum allowed size")) {
+                        logger.error("Image too large to download: {} - {}", url, e.getMessage());
+                    } else {
+                        logger.error("IO error downloading image: {} - {}", url, e.getMessage());
+                    }
                     // 不要在ConcurrentHashMap中存储null值
+                    // 失败的URL将不会出现在结果中
+                } catch (Exception e) {
+                    logger.error("Unexpected error downloading image: {}", url, e);
                     // 失败的URL将不会出现在结果中
                 }
             }, DOWNLOAD_EXECUTOR);
@@ -276,6 +333,9 @@ public class ImageUtils {
             throw new IllegalArgumentException("Image URL cannot be null or empty");
         }
         
+        // Trim whitespace from URL
+        imageUrl = imageUrl.trim();
+        
         logger.debug("Downloading image from URL: {}", imageUrl);
         
         HttpURLConnection connection = null;
@@ -307,7 +367,7 @@ public class ImageUtils {
                     contentLength / (1024 * 1024), MAX_IMAGE_SIZE / (1024 * 1024));
             }
             
-            byte[] imageData = readInputStream(connection.getInputStream(), contentLength);
+            byte[] imageData = readInputStream(connection.getInputStream(), contentLength, MAX_DOWNLOAD_SIZE);
             
             // 如果图片超过5MB，进行压缩
             if (imageData.length > MAX_IMAGE_SIZE) {
@@ -380,15 +440,25 @@ public class ImageUtils {
             return imageBytes;
         }
         
-        logger.info("Image size {} bytes exceeds limit {} bytes, compressing...", imageBytes.length, maxSizeBytes);
+        logger.info("Starting image compression: {} MB -> target {} MB", 
+            imageBytes.length / (1024 * 1024), maxSizeBytes / (1024 * 1024));
         
         try {
+            // 检测图片格式
+            String mimeType = detectMimeType(imageBytes);
+            logger.debug("Detected image MIME type: {}", mimeType);
+            
             // 读取原始图片
-            BufferedImage originalImage = ImageIO.read(new ByteArrayInputStream(imageBytes));
+            ByteArrayInputStream bais = new ByteArrayInputStream(imageBytes);
+            BufferedImage originalImage = ImageIO.read(bais);
             if (originalImage == null) {
-                logger.error("Failed to read image for compression");
+                logger.error("ImageIO.read returned null for MIME type: {}. Image may be corrupted or unsupported format.", mimeType);
+                // 尝试直接返回原始数据，让base64编码继续
+                logger.warn("Returning original image without compression due to read failure");
                 return imageBytes;
             }
+            
+            logger.debug("Successfully read image: {}x{} pixels", originalImage.getWidth(), originalImage.getHeight());
             
             // 检测图片格式
             String format = detectImageFormat(imageBytes);
@@ -442,9 +512,14 @@ public class ImageUtils {
             
             return compressedBytes;
             
+        } catch (IOException e) {
+            logger.error("IOException during image compression: {}", e.getMessage(), e);
+            // 对于IO异常，返回原始图片
+            return imageBytes;
         } catch (Exception e) {
-            logger.error("Failed to compress image", e);
-            return imageBytes; // 返回原始图片
+            logger.error("Unexpected error during image compression: {}", e.getMessage(), e);
+            // 对于其他异常，也返回原始图片
+            return imageBytes;
         }
     }
     
@@ -486,9 +561,52 @@ public class ImageUtils {
                 // 如果没有JPEG writer，使用默认方式
                 ImageIO.write(image, format, baos);
             }
+        } else if ("png".equalsIgnoreCase(format)) {
+            // PNG是无损压缩，尝试转换为JPEG来减小大小
+            logger.debug("Converting PNG to JPEG for compression");
+            
+            // 创建不带透明通道的图像
+            BufferedImage rgbImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
+            Graphics2D g = rgbImage.createGraphics();
+            g.setColor(Color.WHITE);
+            g.fillRect(0, 0, image.getWidth(), image.getHeight());
+            g.drawImage(image, 0, 0, null);
+            g.dispose();
+            
+            // 使用JPEG压缩
+            Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpg");
+            if (writers.hasNext()) {
+                ImageWriter writer = writers.next();
+                ImageOutputStream ios = ImageIO.createImageOutputStream(baos);
+                writer.setOutput(ios);
+                
+                ImageWriteParam param = writer.getDefaultWriteParam();
+                if (param.canWriteCompressed()) {
+                    param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+                    param.setCompressionQuality(quality);
+                }
+                
+                writer.write(null, new IIOImage(rgbImage, null, null), param);
+                ios.close();
+                writer.dispose();
+            } else {
+                // 如果没有JPEG writer，使用默认方式
+                ImageIO.write(rgbImage, "jpg", baos);
+            }
         } else {
-            // 对于其他格式（PNG等），直接写入（PNG是无损压缩）
-            ImageIO.write(image, format, baos);
+            // 对于其他格式，尝试写入
+            logger.debug("Writing image in format: {}", format);
+            if (!ImageIO.write(image, format, baos)) {
+                // 如果写入失败，尝试转换为JPEG
+                logger.warn("Failed to write in format {}, converting to JPEG", format);
+                BufferedImage rgbImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
+                Graphics2D g = rgbImage.createGraphics();
+                g.setColor(Color.WHITE);
+                g.fillRect(0, 0, image.getWidth(), image.getHeight());
+                g.drawImage(image, 0, 0, null);
+                g.dispose();
+                ImageIO.write(rgbImage, "jpg", baos);
+            }
         }
         
         return baos.toByteArray();
