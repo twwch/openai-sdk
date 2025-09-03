@@ -85,7 +85,7 @@ public class BedrockCredentialsIsolator {
 //                        .apiCallAttemptTimeout(Duration.ofMinutes(5))  // 单次尝试超时：5分钟
 //                        .apiCallTimeout(Duration.ofMinutes(10)))       // 总超时：10分钟（适合长流式响应）
                 .httpClientBuilder(NettyNioAsyncHttpClient.builder()
-                        .maxConcurrency(200))
+                        .maxConcurrency(2000))
 //                        .connectionTimeout(Duration.ofSeconds(30))     // 连接超时保持30秒
 //                        .connectionAcquisitionTimeout(Duration.ofSeconds(30))
 //                        .readTimeout(Duration.ofMinutes(5))            // 读取超时：5分钟（流式需要更长）
