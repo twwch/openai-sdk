@@ -22,6 +22,7 @@ import software.amazon.awssdk.services.bedrockruntime.model.*;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
@@ -178,12 +179,15 @@ public class BedrockService {
 
     /**
      * 创建聊天完成（流式）
+     * @return CompletableFuture 用于等待流完成
      */
-    public void createChatCompletionStream(ChatCompletionRequest request,
+    public CompletableFuture<Void> createChatCompletionStream(ChatCompletionRequest request,
                                            Consumer<ChatCompletionChunk> onChunk,
                                            Runnable onComplete,
                                            Consumer<Throwable> onError) throws OpenAIException {
         String bedrockRequest = null;
+        CompletableFuture<Void> streamCompletion = new CompletableFuture<>();
+        
         try {
             // 验证和清理请求参数
             BedrockRequestValidator.validateAndCleanRequest(request);
@@ -209,44 +213,98 @@ public class BedrockService {
                     .accept("application/json")
                     .build();
 
-            // 处理流式响应
+            // 使用原子布尔值跟踪完成状态，防止重复调用回调
+            final java.util.concurrent.atomic.AtomicBoolean isCompleted = new java.util.concurrent.atomic.AtomicBoolean(false);
+            final java.util.concurrent.atomic.AtomicBoolean hasError = new java.util.concurrent.atomic.AtomicBoolean(false);
+            
+            // 处理流式响应 - 使用Visitor模式确保资源清理
             InvokeModelWithResponseStreamResponseHandler responseHandler = InvokeModelWithResponseStreamResponseHandler.builder()
                     .subscriber(responseStream -> {
+                                // 处理流式响应
                         if (responseStream instanceof PayloadPart) {
                             PayloadPart payloadPart = (PayloadPart) responseStream;
+                            if (hasError.get()) {
+                                return; // 如果已经出错，忽略后续数据
+                            }
+                            
                             String chunk = payloadPart.bytes().asUtf8String();
                             try {
                                 // 转换并发送chunk
                                 List<ChatCompletionChunk> chunks = modelAdapter.convertStreamChunk(chunk, objectMapper);
                                 for (ChatCompletionChunk completionChunk : chunks) {
-                                    if (onChunk != null) {
+                                    if (onChunk != null && !hasError.get()) {
                                         onChunk.accept(completionChunk);
                                     }
                                 }
                             } catch (Exception e) {
-                                logger.error("解析流式响应失败", e);
-                                if (onError != null) {
+                                logger.error("解析流式响应失败: {}", e.getMessage());
+                                if (!hasError.getAndSet(true) && onError != null) {
                                     onError.accept(new OpenAIException("解析流式响应失败: " + e.getMessage(), e));
                                 }
+                                streamCompletion.completeExceptionally(e);
                             }
                         } else {
-                            logger.error("未知类型");
+                            // 处理其他事件类型
+                            logger.debug("收到流事件: {}", responseStream.getClass().getSimpleName());
                         }
                     })
                     .onComplete(() -> {
-                        if (onComplete != null) {
-                            onComplete.run();
+                        logger.debug("流式响应处理完成");
+                        if (!isCompleted.getAndSet(true) && !hasError.get()) {
+                            if (onComplete != null) {
+                                try {
+                                    onComplete.run();
+                                } catch (Exception e) {
+                                    logger.error("完成回调执行失败", e);
+                                }
+                            }
+                            streamCompletion.complete(null);
                         }
                     })
                     .onError(throwable -> {
-                        logger.error("Bedrock流式请求失败", throwable);
-                        if (onError != null) {
-                            onError.accept(new OpenAIException("Bedrock流式请求失败: " + throwable.getMessage(), throwable));
+                        logger.error("Bedrock流式请求失败: {}", throwable.getMessage());
+                        if (!hasError.getAndSet(true)) {
+                            if (onError != null) {
+                                try {
+                                    onError.accept(new OpenAIException("Bedrock流式请求失败: " + throwable.getMessage(), throwable));
+                                } catch (Exception e) {
+                                    logger.error("错误回调执行失败", e);
+                                }
+                            }
+                            streamCompletion.completeExceptionally(throwable);
                         }
                     })
                     .build();
 
-            asyncClient.invokeModelWithResponseStream(invokeRequest, responseHandler);
+            // 执行异步调用
+            CompletableFuture<Void> sdkFuture = asyncClient.invokeModelWithResponseStream(invokeRequest, responseHandler);
+            
+            // 确保SDK的Future完成时，我们的Future也完成（用于资源清理）
+            sdkFuture.whenComplete((result, throwable) -> {
+                if (throwable != null) {
+                    if (!hasError.getAndSet(true)) {
+                        logger.error("SDK流式请求失败", throwable);
+                        streamCompletion.completeExceptionally(throwable);
+                    }
+                } else if (!isCompleted.get()) {
+                    // 如果流没有正常完成，强制完成
+                    streamCompletion.complete(null);
+                }
+            });
+            
+            // 添加超时保护，防止连接永远不释放
+            streamCompletion.orTimeout(5, java.util.concurrent.TimeUnit.MINUTES)
+                .exceptionally(throwable -> {
+                    if (throwable instanceof java.util.concurrent.TimeoutException) {
+                        logger.error("流式请求超时（5分钟）");
+                        if (!hasError.getAndSet(true) && onError != null) {
+                            onError.accept(new OpenAIException("流式请求超时", throwable));
+                        }
+                    }
+                    return null;
+                });
+            
+            return streamCompletion;
 
         } catch (Exception e) {
             logger.error("Bedrock流式请求失败", e);
@@ -254,8 +312,15 @@ public class BedrockService {
                 logger.error("请求体: {}", bedrockRequest);
             }
             if (onError != null) {
-                onError.accept(new OpenAIException("Bedrock流式请求失败: " + e.getMessage(), e));
+                try {
+                    onError.accept(new OpenAIException("Bedrock流式请求失败: " + e.getMessage(), e));
+                } catch (Exception callbackError) {
+                    logger.error("错误回调执行失败", callbackError);
+                }
             }
+            // 确保Future被标记为失败
+            streamCompletion.completeExceptionally(e);
+            return streamCompletion;
         }
     }
 }
