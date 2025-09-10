@@ -93,7 +93,7 @@ public class BedrockCredentialsIsolator {
                         // 连接池配置：为每个客户端实例提供较小的连接池
                         .maxConcurrency(10)                            // 最大并发连接数（每个实例10个）
                         .connectionTimeout(Duration.ofSeconds(10))     // 建立连接超时：10秒
-                        .connectionAcquisitionTimeout(Duration.ofSeconds(5))  // 获取连接超时：5秒（快速失败）
+                        .connectionAcquisitionTimeout(Duration.ofSeconds(45))  // 获取连接超时：45秒（快速失败）
                         .maxPendingConnectionAcquires(50)             // 等待队列大小
                         
                         // 流式响应超时配置
@@ -102,7 +102,7 @@ public class BedrockCredentialsIsolator {
                         
                         // 连接复用和清理策略（缩短时间以便快速释放）
                         .connectionTimeToLive(Duration.ofMinutes(5))   // 连接最长生存时间：5分钟
-                        .connectionMaxIdleTime(Duration.ofSeconds(30)) // 空闲连接保持：30秒
+                        .connectionMaxIdleTime(Duration.ofSeconds(10)) // 空闲连接保持：30秒
                         .useIdleConnectionReaper(true))                // 启用空闲连接清理
                 .credentialsProvider(credentialsProvider);
 
