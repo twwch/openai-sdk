@@ -28,7 +28,7 @@ import java.util.function.Consumer;
 /**
  * Bedrock服务实现类
  */
-public class BedrockService {
+public class BedrockService implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(BedrockService.class);
 
     private final BedrockConfig config;
@@ -185,6 +185,55 @@ public class BedrockService {
                                            Consumer<ChatCompletionChunk> onChunk,
                                            Runnable onComplete,
                                            Consumer<Throwable> onError) throws OpenAIException {
+        // 添加重试机制
+        int maxRetries = 3;
+        Exception lastException = null;
+        
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                return createChatCompletionStreamInternal(request, onChunk, onComplete, onError);
+            } catch (Exception e) {
+                lastException = e;
+                String message = e.getMessage();
+                
+                // 判断是否是可重试的错误
+                if (message != null && (
+                    message.contains("Acquire operation took longer") ||
+                    message.contains("connection pool") ||
+                    message.contains("Unable to execute HTTP request") ||
+                    message.contains("timeout"))) {
+                    
+                    if (attempt < maxRetries - 1) {
+                        logger.warn("流式请求失败，尝试重试 ({}/{}): {}", 
+                                   attempt + 1, maxRetries, message);
+                        
+                        // 等待一段时间后重试
+                        try {
+                            Thread.sleep((attempt + 1) * 1000); // 指数退避
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            throw new OpenAIException("重试被中断", ie);
+                        }
+                        continue;
+                    }
+                }
+                
+                // 不可重试的错误或已达到最大重试次数
+                throw e;
+            }
+        }
+        
+        // 所有重试都失败
+        throw new OpenAIException("流式请求失败，已重试 " + maxRetries + " 次", lastException);
+    }
+    
+    /**
+     * 内部流式请求实现（不带重试）
+     */
+    private CompletableFuture<Void> createChatCompletionStreamInternal(ChatCompletionRequest request,
+                                           Consumer<ChatCompletionChunk> onChunk,
+                                           Runnable onComplete,
+                                           Consumer<Throwable> onError) throws OpenAIException {
         String bedrockRequest = null;
         CompletableFuture<Void> streamCompletion = new CompletableFuture<>();
         
@@ -293,10 +342,10 @@ public class BedrockService {
             });
             
             // 添加超时保护，防止连接永远不释放
-            streamCompletion.orTimeout(5, java.util.concurrent.TimeUnit.MINUTES)
+            streamCompletion.orTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
                 .exceptionally(throwable -> {
                     if (throwable instanceof java.util.concurrent.TimeoutException) {
-                        logger.error("流式请求超时（5分钟）");
+                        logger.error("流式请求超时（90秒）");
                         if (!hasError.getAndSet(true) && onError != null) {
                             onError.accept(new OpenAIException("流式请求超时", throwable));
                         }
@@ -321,6 +370,53 @@ public class BedrockService {
             // 确保Future被标记为失败
             streamCompletion.completeExceptionally(e);
             return streamCompletion;
+        }
+    }
+
+    /**
+     * 关闭服务并释放资源
+     */
+    @Override
+    public void close() {
+        try {
+            logger.debug("关闭 BedrockService，释放资源...");
+            
+            // 关闭同步客户端
+            if (client != null) {
+                try {
+                    client.close();
+                    logger.debug("同步客户端已关闭");
+                } catch (Exception e) {
+                    logger.warn("关闭同步客户端时出现警告（可能已经关闭）: {}", e.getMessage());
+                }
+            }
+            
+            // 关闭异步客户端（可能需要更长时间）
+            if (asyncClient != null) {
+                try {
+                    // 使用异步方式关闭，避免阻塞
+                    java.util.concurrent.CompletableFuture<Void> closeFuture = 
+                        java.util.concurrent.CompletableFuture.runAsync(() -> {
+                            try {
+                                asyncClient.close();
+                            } catch (Exception e) {
+                                logger.warn("关闭异步客户端时出现警告: {}", e.getMessage());
+                            }
+                        });
+                    
+                    // 等待最多5秒
+                    closeFuture.get(5, java.util.concurrent.TimeUnit.SECONDS);
+                    logger.debug("异步客户端已关闭");
+                } catch (java.util.concurrent.TimeoutException e) {
+                    logger.warn("关闭异步客户端超时（5秒），可能有未完成的请求");
+                } catch (Exception e) {
+                    logger.warn("关闭异步客户端时出现警告: {}", e.getMessage());
+                }
+            }
+            
+            logger.debug("BedrockService 资源释放完成");
+        } catch (Exception e) {
+            logger.error("关闭 BedrockService 时发生错误", e);
         }
     }
 }

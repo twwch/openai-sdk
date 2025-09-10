@@ -19,7 +19,7 @@ import java.util.function.Consumer;
  * OpenAI客户端
  * 这是SDK的主要入口点
  */
-public class OpenAI {
+public class OpenAI implements AutoCloseable {
     private final OpenAIService service;
     private final GeminiService geminiService;
 
@@ -329,5 +329,23 @@ public class OpenAI {
         messages.add(ChatMessage.system(systemPrompt));
         messages.add(ChatMessage.user(userPrompt));
         createChatCompletionStream(model, messages, onChunk);
+    }
+    
+    /**
+     * 关闭客户端并释放资源
+     */
+    @Override
+    public void close() {
+        try {
+            if (service != null) {
+                service.close();
+            }
+            if (geminiService != null) {
+                // Gemini service 可能也需要关闭，但目前没有实现
+            }
+        } catch (Exception e) {
+            // 记录错误但不抛出，避免影响其他资源释放
+            e.printStackTrace();
+        }
     }
 }

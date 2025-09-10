@@ -56,11 +56,11 @@ public class ConcurrentBedrockTest {
             System.exit(1);
         }
 
-        // 创建Bedrock服务
-        System.out.println("初始化Bedrock服务...");
-        OpenAI service = OpenAI.bedrock(region, accessKeyId, secretAccessKey, modelId);
+        // 显示配置信息
+        System.out.println("配置信息:");
         System.out.println("使用模型: " + modelId);
-        System.out.println("区域: " + region + "\n");
+        System.out.println("区域: " + region);
+        System.out.println("每次请求都会重新创建 OpenAI service 实例\n");
 
         // 创建线程池
         ExecutorService executor = Executors.newFixedThreadPool(CONCURRENT_REQUESTS);
@@ -83,8 +83,8 @@ public class ConcurrentBedrockTest {
                         Thread.sleep((requestId / CONCURRENT_REQUESTS) * 200L);
                     }
                     
-                    // 执行请求
-                    sendRequest(service, requestId, modelId);
+                    // 执行请求（每次创建新的 service 实例）
+                    sendRequest(region, accessKeyId, secretAccessKey, modelId, requestId);
                     
                 } catch (Exception e) {
                     System.err.println("[请求 #" + requestId + "] 意外错误: " + e.getMessage());
@@ -123,10 +123,11 @@ public class ConcurrentBedrockTest {
         printStatistics(startTime, endTime);
     }
 
-    private static void sendRequest(OpenAI service, int requestId, String modelId) {
+    private static void sendRequest(String region, String accessKeyId, String secretAccessKey, String modelId, int requestId) {
         long requestStartTime = System.currentTimeMillis();
         
-        try {
+        try (// 使用 try-with-resources 确保资源释放
+             OpenAI service = OpenAI.bedrock(region, accessKeyId, secretAccessKey, modelId)) {
             // 构建请求
             ChatCompletionRequest request = new ChatCompletionRequest();
             request.setModel(modelId);

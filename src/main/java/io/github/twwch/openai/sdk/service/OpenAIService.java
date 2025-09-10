@@ -19,15 +19,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
  * OpenAI服务类
  */
-public class OpenAIService {
+public class OpenAIService implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(OpenAIService.class);
     
     private final OpenAIHttpClient httpClient;
@@ -120,22 +122,132 @@ public class OpenAIService {
      * @throws OpenAIException 如果请求失败
      */
     public ChatCompletionResponse createChatCompletion(ChatCompletionRequest request) throws OpenAIException {
-        // 如果是Bedrock，使用Bedrock服务
-        if (config.isBedrock()) {
-            return bedrockService.createChatCompletion(request);
+        // 重试配置
+        int maxRetries = 3;
+        int retryCount = 0;
+        long retryDelay = 1000; // 初始重试延迟1秒
+        
+        while (retryCount < maxRetries) {
+            try {
+                // 如果是Bedrock，使用Bedrock服务
+                if (config.isBedrock()) {
+                    return bedrockService.createChatCompletion(request);
+                }
+                
+                // 如果是Azure OpenAI，并且没有设置模型，则使用部署ID作为模型
+                if (config.isAzure() && (request.getModel() == null || request.getModel().isEmpty())) {
+                    AzureOpenAIConfig azureConfig = (AzureOpenAIConfig) config;
+                    request.setModel(azureConfig.getDeploymentId());
+                }
+                
+                String response = httpClient.post("/chat/completions", request);
+                try {
+                    return objectMapper.readValue(response, ChatCompletionResponse.class);
+                } catch (JsonProcessingException e) {
+                    logger.error("解析聊天完成响应失败 - 模型: {}, 响应: {}", request.getModel(), response, e);
+                    throw new OpenAIException("无法解析聊天完成响应", e);
+                }
+                
+            } catch (Exception e) {
+                // 判断是否是可重试的错误
+                if (isRetryableError(e)) {
+                    retryCount++;
+                    
+                    if (retryCount >= maxRetries) {
+                        logger.error("达到最大重试次数 ({} 次)，放弃重试", maxRetries);
+                        throw new OpenAIException("请求失败，已重试 " + maxRetries + " 次: " + e.getMessage(), e);
+                    }
+                    
+                    logger.warn("遇到可重试错误: {}，将在 {} 毫秒后进行第 {} 次重试", 
+                               e.getMessage(), retryDelay, retryCount + 1);
+                    
+                    try {
+                        Thread.sleep(retryDelay);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new OpenAIException("重试被中断", ie);
+                    }
+                    
+                    // 指数退避，下次重试延迟翻倍
+                    retryDelay = Math.min(retryDelay * 2, 10000); // 最多延迟10秒
+                    
+                } else {
+                    // 不可重试的错误，直接抛出
+                    throw e;
+                }
+            }
         }
-        // 如果是Azure OpenAI，并且没有设置模型，则使用部署ID作为模型
-        if (config.isAzure() && (request.getModel() == null || request.getModel().isEmpty())) {
-            AzureOpenAIConfig azureConfig = (AzureOpenAIConfig) config;
-            request.setModel(azureConfig.getDeploymentId());
+        
+        // 不应该到达这里
+        throw new OpenAIException("意外的重试逻辑错误");
+    }
+    
+    /**
+     * 判断是否是可重试的错误
+     */
+    private boolean isRetryableError(Exception e) {
+        if (e == null) {
+            return false;
         }
-        String response = httpClient.post("/chat/completions", request);
-        try {
-            return objectMapper.readValue(response, ChatCompletionResponse.class);
-        } catch (JsonProcessingException e) {
-            logger.error("解析聊天完成响应失败 - 模型: {}, 响应: {}", request.getModel(), response, e);
-            throw new OpenAIException("无法解析聊天完成响应", e);
+        
+        String message = e.getMessage();
+        if (message == null) {
+            message = "";
         }
+        
+        // 超时错误
+        if (e instanceof SocketTimeoutException || 
+            message.contains("timeout") || 
+            message.contains("Timeout") ||
+            message.contains("timed out")) {
+            logger.debug("检测到超时错误: {}", message);
+            return true;
+        }
+        
+        // 网络错误
+        if (e instanceof IOException || 
+            message.contains("connection") || 
+            message.contains("Connection") ||
+            message.contains("Network") ||
+            message.contains("network") ||
+            message.contains("UnknownHost") ||
+            message.contains("SocketException") ||
+            message.contains("ConnectException")) {
+            logger.debug("检测到网络错误: {}", message);
+            return true;
+        }
+        
+        // 连接池错误
+        if (message.contains("connection pool") || 
+            message.contains("Connection pool") ||
+            message.contains("Acquire operation") ||
+            message.contains("ClosedChannelException") ||
+            message.contains("pool exhausted") ||
+            message.contains("No connection available")) {
+            logger.debug("检测到连接池错误: {}", message);
+            return true;
+        }
+        
+        // AWS SDK 特定的可重试错误
+        if (message.contains("ThrottlingException") ||
+            message.contains("TooManyRequestsException") ||
+            message.contains("RequestTimeout") ||
+            message.contains("ServiceUnavailable") ||
+            message.contains("Unable to execute HTTP request")) {
+            logger.debug("检测到AWS SDK可重试错误: {}", message);
+            return true;
+        }
+        
+        // HTTP 5xx 错误（服务器错误）
+        if (message.contains("500") || 
+            message.contains("502") || 
+            message.contains("503") || 
+            message.contains("504")) {
+            logger.debug("检测到HTTP 5xx错误: {}", message);
+            return true;
+        }
+        
+        return false;
     }
 
     /**
@@ -150,11 +262,70 @@ public class OpenAIService {
                                            Consumer<ChatCompletionChunk> onChunk,
                                            Runnable onComplete,
                                            Consumer<Throwable> onError) throws OpenAIException {
-        // 如果是Bedrock，使用Bedrock服务
-        if (config.isBedrock()) {
-            bedrockService.createChatCompletionStream(request, onChunk, onComplete, onError);
-            return;
+        // 重试配置
+        int maxRetries = 3;
+        int retryCount = 0;
+        long retryDelay = 1000; // 初始重试延迟1秒
+        
+        while (retryCount < maxRetries) {
+            try {
+                // 如果是Bedrock，使用Bedrock服务
+                if (config.isBedrock()) {
+                    bedrockService.createChatCompletionStream(request, onChunk, onComplete, onError);
+                    return;
+                }
+                
+                // 调用内部流式方法
+                createChatCompletionStreamInternal(request, onChunk, onComplete, onError);
+                return; // 成功则返回
+                
+            } catch (Exception e) {
+                // 判断是否是可重试的错误
+                if (isRetryableError(e)) {
+                    retryCount++;
+                    
+                    if (retryCount >= maxRetries) {
+                        logger.error("流式请求达到最大重试次数 ({} 次)，放弃重试", maxRetries);
+                        if (onError != null) {
+                            onError.accept(new OpenAIException("流式请求失败，已重试 " + maxRetries + " 次: " + e.getMessage(), e));
+                        }
+                        throw new OpenAIException("流式请求失败，已重试 " + maxRetries + " 次: " + e.getMessage(), e);
+                    }
+                    
+                    logger.warn("流式请求遇到可重试错误: {}，将在 {} 毫秒后进行第 {} 次重试", 
+                               e.getMessage(), retryDelay, retryCount + 1);
+                    
+                    try {
+                        Thread.sleep(retryDelay);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        if (onError != null) {
+                            onError.accept(new OpenAIException("重试被中断", ie));
+                        }
+                        throw new OpenAIException("重试被中断", ie);
+                    }
+                    
+                    // 指数退避，下次重试延迟翻倍
+                    retryDelay = Math.min(retryDelay * 2, 10000); // 最多延迟10秒
+                    
+                } else {
+                    // 不可重试的错误，直接传递给错误处理器并抛出
+                    if (onError != null) {
+                        onError.accept(e);
+                    }
+                    throw e;
+                }
+            }
         }
+    }
+    
+    /**
+     * 内部流式请求方法（不带重试）
+     */
+    private void createChatCompletionStreamInternal(ChatCompletionRequest request, 
+                                                    Consumer<ChatCompletionChunk> onChunk,
+                                                    Runnable onComplete,
+                                                    Consumer<Throwable> onError) throws OpenAIException {
         // 设置流式标志
         request.setStream(true);
         
@@ -291,5 +462,22 @@ public class OpenAIService {
                 }
             }
         });
+    }
+    
+    /**
+     * 关闭服务并释放资源
+     */
+    @Override
+    public void close() {
+        try {
+            if (bedrockService != null) {
+                bedrockService.close();
+            }
+            if (httpClient != null) {
+                httpClient.close();
+            }
+        } catch (Exception e) {
+            logger.error("关闭 OpenAIService 时发生错误", e);
+        }
     }
 }

@@ -87,22 +87,22 @@ public class BedrockCredentialsIsolator {
         BedrockRuntimeAsyncClientBuilder builder = BedrockRuntimeAsyncClient.builder()
                 .region(Region.of(region))
                 .overrideConfiguration(o -> o
-                        .apiCallAttemptTimeout(Duration.ofMinutes(5)) // 单次尝试超时：5分钟（支持长内容生成）
-                        .apiCallTimeout(Duration.ofMinutes(5)))       // 总超时：5分钟（支持超长流式响应）
+                        .apiCallAttemptTimeout(Duration.ofMinutes(2)) // 单次尝试超时：2分钟
+                        .apiCallTimeout(Duration.ofMinutes(2)))       // 总超时：2分钟
                 .httpClientBuilder(NettyNioAsyncHttpClient.builder()
-                        // 连接池配置：平衡并发性能和资源利用
-                        .maxConcurrency(100)                            // 最大并发连接数
-                        .connectionTimeout(Duration.ofSeconds(30))     // 建立连接超时：30秒
-                        .connectionAcquisitionTimeout(Duration.ofSeconds(90))  // 获取连接超时：90秒
-                        .maxPendingConnectionAcquires(500)             // 等待队列大小
+                        // 连接池配置：为每个客户端实例提供较小的连接池
+                        .maxConcurrency(10)                            // 最大并发连接数（每个实例10个）
+                        .connectionTimeout(Duration.ofSeconds(10))     // 建立连接超时：10秒
+                        .connectionAcquisitionTimeout(Duration.ofSeconds(5))  // 获取连接超时：5秒（快速失败）
+                        .maxPendingConnectionAcquires(50)             // 等待队列大小
                         
-                        // 流式响应超时配置（关键）
-                        .readTimeout(Duration.ofMinutes(2))            // 读取超时：2分钟（数据块之间的最大间隔）
-                        .writeTimeout(Duration.ofSeconds(30))          // 写入超时：30秒
+                        // 流式响应超时配置
+                        .readTimeout(Duration.ofSeconds(60))           // 读取超时：60秒
+                        .writeTimeout(Duration.ofSeconds(10))          // 写入超时：10秒
                         
-                        // 连接复用和清理策略
-                        .connectionTimeToLive(Duration.ofMinutes(30))  // 连接最长生存时间：30分钟（支持长流）
-                        .connectionMaxIdleTime(Duration.ofMinutes(2))  // 空闲连接保持：2分钟（复用频繁请求）
+                        // 连接复用和清理策略（缩短时间以便快速释放）
+                        .connectionTimeToLive(Duration.ofMinutes(5))   // 连接最长生存时间：5分钟
+                        .connectionMaxIdleTime(Duration.ofSeconds(30)) // 空闲连接保持：30秒
                         .useIdleConnectionReaper(true))                // 启用空闲连接清理
                 .credentialsProvider(credentialsProvider);
 

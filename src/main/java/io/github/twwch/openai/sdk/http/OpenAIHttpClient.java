@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * OpenAI HTTP客户端
  */
-public class OpenAIHttpClient {
+public class OpenAIHttpClient implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(OpenAIHttpClient.class);
     
     private final OkHttpClient client;
@@ -281,6 +281,34 @@ public class OpenAIHttpClient {
         } catch (JsonProcessingException e) {
             logger.error("序列化流式请求体失败: {}", endpoint, e);
             throw new OpenAIException("无法序列化请求体", e);
+        }
+    }
+    
+    /**
+     * 关闭 HTTP 客户端并释放资源
+     */
+    @Override
+    public void close() {
+        try {
+            if (client != null) {
+                // 关闭连接池
+                client.connectionPool().evictAll();
+                
+                // 关闭调度器
+                client.dispatcher().executorService().shutdown();
+                
+                // 等待一小段时间让任务完成
+                if (!client.dispatcher().executorService().awaitTermination(5, TimeUnit.SECONDS)) {
+                    client.dispatcher().executorService().shutdownNow();
+                }
+                
+                // 如果有缓存，关闭它
+                if (client.cache() != null) {
+                    client.cache().close();
+                }
+            }
+        } catch (Exception e) {
+            logger.error("关闭 HTTP 客户端时发生错误", e);
         }
     }
 }
