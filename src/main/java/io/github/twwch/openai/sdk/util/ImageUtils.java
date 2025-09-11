@@ -110,38 +110,49 @@ public class ImageUtils {
             
             logger.info("Successfully downloaded image, actual size: {} bytes", imageData.length);
             
-            // 检查原始图片大小，考虑base64编码后会增大约33%
-            // 如果原始图片超过3.7MB（base64后约5MB），进行压缩
-            int maxOriginalSize = (int)(3.7 * 1024 * 1024); // 3.7MB原始大小，base64后约4.9MB
-            if (imageData.length > maxOriginalSize) {
-                logger.info("Image size {} MB exceeds safe size {} MB for base64 encoding, attempting compression...", 
-                    imageData.length / (1024.0 * 1024.0), maxOriginalSize / (1024.0 * 1024.0));
+            // 先转换为base64以检查实际大小
+            String base64 = Base64.getEncoder().encodeToString(imageData);
+            String mediaType = getMediaTypeFromContentType(contentType);
+            String result = "data:" + mediaType + ";base64," + base64;
+            
+            // 检查base64编码后的实际大小（包括data URI前缀）
+            int base64Size = result.length();
+            int maxBase64Size = 5 * 1024 * 1024 - 100 * 1024; // 5MB - 100KB余量
+            
+            if (base64Size > maxBase64Size) {
+                logger.info("Base64 encoded size {} bytes exceeds limit {} bytes, attempting compression...", 
+                    base64Size, maxBase64Size);
                 try {
-                    // 压缩到3.5MB以内，base64后约4.6MB，留足够余量
-                    byte[] compressedData = compressImage(imageData, (int)(3.5 * 1024 * 1024));
-                    if (compressedData != null && compressedData.length > 0) {
-                        if (compressedData.length < imageData.length) {
-                            logger.info("Successfully compressed image from {} MB to {} MB", 
-                                imageData.length / (1024 * 1024), compressedData.length / (1024 * 1024));
-                            imageData = compressedData;
+                    // 计算需要压缩到的目标大小
+                    // 根据当前超出的比例来决定压缩程度
+                    double compressionRatio = (double)maxBase64Size / base64Size * 0.95; // 留5%余量
+                    int targetSize = (int)(imageData.length * compressionRatio);
+                    targetSize = Math.min(targetSize, (int)(3.5 * 1024 * 1024)); // 最多压缩到3.5MB
+                    
+                    byte[] compressedData = compressImage(imageData, targetSize);
+                    if (compressedData != null && compressedData.length > 0 && compressedData.length < imageData.length) {
+                        // 重新生成base64
+                        String compressedBase64 = Base64.getEncoder().encodeToString(compressedData);
+                        String compressedResult = "data:" + mediaType + ";base64," + compressedBase64;
+                        
+                        if (compressedResult.length() <= maxBase64Size) {
+                            logger.info("Successfully compressed: original base64 {} bytes -> compressed base64 {} bytes", 
+                                base64Size, compressedResult.length());
+                            result = compressedResult;
                         } else {
-                            logger.warn("Compression did not reduce size, using original image");
+                            logger.warn("Compressed base64 {} bytes still exceeds limit, using anyway", compressedResult.length());
+                            result = compressedResult;
                         }
                     } else {
-                        logger.error("Compression returned null or empty data, using original image");
+                        logger.warn("Compression failed or did not reduce size, using original image");
                     }
                 } catch (Exception e) {
                     logger.error("Error during compression, using original image: {}", e.getMessage());
                     // 继续使用原始图片
                 }
+            } else {
+                logger.debug("Base64 encoded size {} bytes is within limit {} bytes", base64Size, maxBase64Size);
             }
-            
-            // 转换为base64
-            String base64 = Base64.getEncoder().encodeToString(imageData);
-            
-            // 构建完整的data URI
-            String mediaType = getMediaTypeFromContentType(contentType);
-            String result = "data:" + mediaType + ";base64," + base64;
             
             // 缓存结果
             IMAGE_CACHE.put(imageUrl, new CachedImage(result));
@@ -735,10 +746,17 @@ public class ImageUtils {
             // 解码Base64
             byte[] imageBytes = Base64.getDecoder().decode(base64Content);
             
-            // 检查是否需要压缩
-            if (imageBytes.length <= maxSizeBytes) {
+            // 检查base64编码后的大小是否需要压缩
+            // 计算完整的base64字符串大小（包括前缀）
+            int currentBase64Size = base64Data.length();
+            if (currentBase64Size <= maxSizeBytes) {
+                logger.debug("Base64 image size {} bytes is within limit {} bytes, no compression needed", 
+                    currentBase64Size, maxSizeBytes);
                 return base64Data;
             }
+            
+            logger.info("Base64 image size {} bytes exceeds limit {} bytes, compressing...", 
+                currentBase64Size, maxSizeBytes);
             
             // 压缩图片
             // maxSizeBytes是最终base64字符串的大小限制
@@ -750,14 +768,27 @@ public class ImageUtils {
             // 重新编码为Base64
             String compressedBase64 = Base64.getEncoder().encodeToString(compressedBytes);
             
-            // 如果原始数据有data URI前缀，保持相同格式（可能需要更新MIME类型）
+            // 构建最终的base64字符串
+            String result;
             if (!prefix.isEmpty()) {
                 // 检测压缩后的格式
                 String mimeType = detectMimeType(compressedBytes);
-                return "data:" + mimeType + ";base64," + compressedBase64;
+                result = "data:" + mimeType + ";base64," + compressedBase64;
+            } else {
+                result = compressedBase64;
             }
             
-            return compressedBase64;
+            // 验证压缩后的大小
+            int finalSize = result.length();
+            if (finalSize > maxSizeBytes) {
+                logger.warn("After compression, base64 size {} bytes still exceeds limit {} bytes", 
+                    finalSize, maxSizeBytes);
+            } else {
+                logger.info("Successfully compressed base64 from {} bytes to {} bytes", 
+                    currentBase64Size, finalSize);
+            }
+            
+            return result;
             
         } catch (Exception e) {
             logger.error("Failed to compress base64 image", e);

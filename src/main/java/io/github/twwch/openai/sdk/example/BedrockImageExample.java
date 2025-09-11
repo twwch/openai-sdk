@@ -55,9 +55,9 @@ public class BedrockImageExample {
         ChatMessage.ContentPart[] parts = new ChatMessage.ContentPart[] {
             ChatMessage.ContentPart.text("请详细描述这张自然风景图片，包括天气、时间、景色特点等。"),
 //            ChatMessage.ContentPart.imageUrl("https://cdn-aws.iweaver.ai/docx/2025/08/30/2705fad2-36af-42a5-9d83-01118b3171fb/1152069245.png")
-//            ChatMessage.ContentPart.imageUrl("https://cdn-aws.iweaver.ai/docx/2025/08/28/9033ff93-7ef4-42e7-a507-3584e0280cc7/哲风壁纸_天空草地-少年奔跑.png")
+            ChatMessage.ContentPart.imageUrl("https://cdn-aws.iweaver.ai/docx/2025/08/28/9033ff93-7ef4-42e7-a507-3584e0280cc7/哲风壁纸_天空草地-少年奔跑.png")
 //            ChatMessage.ContentPart.imageUrl("https://gaopinfs-cdn.gaopinimages.com/gaopinfs/202309/1693900972297.jpg")
-            ChatMessage.ContentPart.imageUrl("https://cdn-aws.iweaver.ai/docx/2025/09/11/aeaa6742-7cf2-4855-a2aa-69c7b84b065d/IMG_20250911_140755.jpg")
+//            ChatMessage.ContentPart.imageUrl("https://cdn-aws.iweaver.ai/docx/2025/09/11/aeaa6742-7cf2-4855-a2aa-69c7b84b065d/IMG_20250911_140755.jpg")
         };
         
         ChatMessage message = new ChatMessage();
