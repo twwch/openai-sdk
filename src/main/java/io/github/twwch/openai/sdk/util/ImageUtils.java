@@ -553,8 +553,8 @@ public class ImageUtils {
                 }
             }
             
-            logger.info("Image compressed from {} bytes to {} bytes (quality: {})", 
-                imageBytes.length, compressedBytes.length, quality);
+            logger.info("Image compressed from {} bytes to {} bytes", 
+                imageBytes.length, compressedBytes.length);
             
             return compressedBytes;
             
