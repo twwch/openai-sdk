@@ -31,7 +31,9 @@ public class ImageUtils {
     private static final ConcurrentHashMap<String, CachedImage> IMAGE_CACHE = new ConcurrentHashMap<>();
     private static final long CACHE_EXPIRY_MS = TimeUnit.HOURS.toMillis(1); // 缓存1小时
     private static final int MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 压缩目标大小5MB
+    private static final int SAFE_IMAGE_SIZE = 4 * 1024 * 1024; // 安全大小4MB（留出空间给base64编码）
     private static final int MAX_DOWNLOAD_SIZE = Integer.parseInt(System.getProperty("openai.sdk.max.download.size", String.valueOf(50 * 1024 * 1024))); // 最大下载50MB，可通过系统属性配置
+    private static final int MAX_IMAGE_DIMENSION = 8000; // Bedrock最大图片尺寸限制：8000像素
     private static final int CONNECT_TIMEOUT = 5000; // 连接超时5秒
     private static final int READ_TIMEOUT = 10000; // 读取超时10秒
     
@@ -113,7 +115,7 @@ public class ImageUtils {
                 logger.info("Image size {} MB exceeds target size {} MB, attempting compression...", 
                     imageData.length / (1024 * 1024), MAX_IMAGE_SIZE / (1024 * 1024));
                 try {
-                    byte[] compressedData = compressImage(imageData, MAX_IMAGE_SIZE - 100000); // 留100KB余量，确保base64编码后不超限
+                    byte[] compressedData = compressImage(imageData, SAFE_IMAGE_SIZE); // 使用安全大小4MB
                     if (compressedData != null && compressedData.length > 0) {
                         if (compressedData.length < imageData.length) {
                             logger.info("Successfully compressed image from {} MB to {} MB", 
@@ -369,7 +371,7 @@ public class ImageUtils {
             // 如果图片超过5MB，进行压缩
             if (imageData.length > MAX_IMAGE_SIZE) {
                 int originalSize = imageData.length;
-                imageData = compressImage(imageData, MAX_IMAGE_SIZE - 100000); // 留100KB余量
+                imageData = compressImage(imageData, SAFE_IMAGE_SIZE); // 使用安全大小4MB
                 logger.info("Image compressed from {} bytes to {} bytes", originalSize, imageData.length);
             }
             
@@ -457,50 +459,97 @@ public class ImageUtils {
             
             logger.debug("Successfully read image: {}x{} pixels", originalImage.getWidth(), originalImage.getHeight());
             
+            // 检查图片尺寸是否超过限制
+            if (originalImage.getWidth() > MAX_IMAGE_DIMENSION || originalImage.getHeight() > MAX_IMAGE_DIMENSION) {
+                logger.warn("Image dimensions {}x{} exceed maximum allowed {}x{}, resizing...", 
+                    originalImage.getWidth(), originalImage.getHeight(), MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION);
+                
+                // 计算缩放比例，保持宽高比
+                double scaleWidth = (double) MAX_IMAGE_DIMENSION / originalImage.getWidth();
+                double scaleHeight = (double) MAX_IMAGE_DIMENSION / originalImage.getHeight();
+                double scale = Math.min(scaleWidth, scaleHeight);
+                
+                int newWidth = (int) (originalImage.getWidth() * scale);
+                int newHeight = (int) (originalImage.getHeight() * scale);
+                
+                originalImage = resizeImage(originalImage, newWidth, newHeight);
+                logger.info("Resized image to {}x{} to meet dimension requirements", newWidth, newHeight);
+            }
+            
             // 检测图片格式
             String format = detectImageFormat(imageBytes);
             
-            // 初始压缩质量
-            float quality = 0.9f;
+            // 多级压缩策略
             byte[] compressedBytes = imageBytes;
+            BufferedImage workingImage = originalImage;
             
-            // 逐步降低质量直到满足大小要求
-            int attemptCount = 0;
-            while (compressedBytes.length > maxSizeBytes && attemptCount < 10) {
-                attemptCount++;
+            // 第一阶段：如果图片远大于目标，先缩放
+            if (imageBytes.length > maxSizeBytes * 3) {
+                // 计算需要的缩放比例
+                double scaleFactor = Math.sqrt((double)maxSizeBytes / imageBytes.length) * 1.5;
+                scaleFactor = Math.max(0.3, Math.min(1.0, scaleFactor)); // 限制在30%-100%
                 
-                if (quality > 0.2f) {
-                    // 先尝试降低质量
-                    quality -= 0.1f;
-                    compressedBytes = compressWithQuality(originalImage, format, quality);
-                    logger.debug("Attempt {}: Compressed with quality {} - size: {} bytes", 
-                        attemptCount, quality, compressedBytes.length);
-                } else {
-                    // 如果质量已经很低但仍然太大，需要缩放图片
-                    double scale = Math.sqrt((double) maxSizeBytes / compressedBytes.length) * 0.9; // 留一点余量
-                    if (scale < 0.1) {
-                        scale = 0.1; // 最小缩放到10%
-                    }
-                    
-                    int newWidth = Math.max(100, (int) (originalImage.getWidth() * scale));
-                    int newHeight = Math.max(100, (int) (originalImage.getHeight() * scale));
-                    
-                    // 缩放图片
-                    BufferedImage scaledImage = resizeImage(originalImage, newWidth, newHeight);
-                    originalImage = scaledImage;
-                    
-                    // 重置质量并重新压缩
-                    quality = 0.5f;
-                    compressedBytes = compressWithQuality(originalImage, format, quality);
-                    
-                    logger.info("Resized image to {}x{} for compression, new size: {} bytes", 
-                        newWidth, newHeight, compressedBytes.length);
-                    
-                    // 如果缩放后还是太大，继续降低质量
-                    if (compressedBytes.length > maxSizeBytes) {
-                        quality = 0.2f;
-                        compressedBytes = compressWithQuality(originalImage, format, quality);
-                    }
+                int newWidth = (int)(originalImage.getWidth() * scaleFactor);
+                int newHeight = (int)(originalImage.getHeight() * scaleFactor);
+                
+                // 保持最小尺寸，但不能超过最大尺寸限制
+                newWidth = Math.max(800, newWidth);
+                newHeight = Math.max(600, newHeight);
+                newWidth = Math.min(MAX_IMAGE_DIMENSION, newWidth);
+                newHeight = Math.min(MAX_IMAGE_DIMENSION, newHeight);
+                
+                logger.info("图片过大 ({} MB)，先缩放到 {}x{}", 
+                    imageBytes.length / (1024 * 1024), newWidth, newHeight);
+                
+                workingImage = resizeImage(originalImage, newWidth, newHeight);
+                compressedBytes = compressWithQuality(workingImage, format, 0.85f);
+                
+                logger.info("缩放后大小：{} MB", compressedBytes.length / (1024 * 1024));
+            }
+            
+            // 第二阶段：调整质量
+            float[] qualityLevels = {0.85f, 0.75f, 0.65f, 0.55f, 0.45f, 0.35f, 0.25f};
+            int qualityIndex = 0;
+            
+            while (compressedBytes.length > maxSizeBytes && qualityIndex < qualityLevels.length) {
+                float quality = qualityLevels[qualityIndex++];
+                compressedBytes = compressWithQuality(workingImage, format, quality);
+                logger.debug("质量 {} - 大小: {} bytes", quality, compressedBytes.length);
+                
+                if (compressedBytes.length <= maxSizeBytes) {
+                    break;
+                }
+            }
+            
+            // 第三阶段：如果质量降低后仍然超出，进一步缩放
+            if (compressedBytes.length > maxSizeBytes) {
+                logger.warn("质量压缩不足，需要进一步缩放图片");
+                
+                // 计算额外缩放比例
+                double additionalScale = Math.sqrt((double)maxSizeBytes / compressedBytes.length) * 0.95;
+                additionalScale = Math.max(0.5, additionalScale); // 最小缩放到50%
+                
+                int finalWidth = (int)(workingImage.getWidth() * additionalScale);
+                int finalHeight = (int)(workingImage.getHeight() * additionalScale);
+                
+                // 保持最小尺寸，但不能超过最大尺寸限制
+                finalWidth = Math.max(400, finalWidth);
+                finalHeight = Math.max(300, finalHeight);
+                finalWidth = Math.min(MAX_IMAGE_DIMENSION, finalWidth);
+                finalHeight = Math.min(MAX_IMAGE_DIMENSION, finalHeight);
+                
+                workingImage = resizeImage(workingImage, finalWidth, finalHeight);
+                
+                // 使用中等质量重新压缩
+                compressedBytes = compressWithQuality(workingImage, format, 0.5f);
+                
+                logger.info("最终缩放到 {}x{}，大小: {} bytes", 
+                    finalWidth, finalHeight, compressedBytes.length);
+                
+                // 最后的尝试：如果还是太大，使用最低质量
+                if (compressedBytes.length > maxSizeBytes) {
+                    compressedBytes = compressWithQuality(workingImage, format, 0.2f);
+                    logger.warn("使用最低质量压缩，最终大小: {} bytes", compressedBytes.length);
                 }
             }
             
@@ -613,6 +662,10 @@ public class ImageUtils {
      * 缩放图片
      */
     private static BufferedImage resizeImage(BufferedImage originalImage, int targetWidth, int targetHeight) {
+        // 确保目标尺寸不超过最大限制
+        targetWidth = Math.min(targetWidth, MAX_IMAGE_DIMENSION);
+        targetHeight = Math.min(targetHeight, MAX_IMAGE_DIMENSION);
+        
         BufferedImage resizedImage = new BufferedImage(targetWidth, targetHeight, 
             originalImage.getType() == 0 ? BufferedImage.TYPE_INT_ARGB : originalImage.getType());
         
@@ -684,8 +737,9 @@ public class ImageUtils {
                 return base64Data;
             }
             
-            // 压缩图片（考虑base64编码后会增大约33%）
-            int targetSize = (int)(maxSizeBytes * 0.75); // 留出base64编码的空间
+            // 压缩图片（base64编码后会增大约33%，所以目标大小要更小）
+            // 考虑到data URI前缀，目标大小设置为最大值的70%
+            int targetSize = (int)(maxSizeBytes * 0.70); // 留出30%空间给base64编码和前缀
             byte[] compressedBytes = compressImage(imageBytes, targetSize);
             
             // 重新编码为Base64

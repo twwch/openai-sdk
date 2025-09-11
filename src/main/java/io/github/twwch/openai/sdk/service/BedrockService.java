@@ -32,10 +32,11 @@ public class BedrockService implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(BedrockService.class);
 
     private final BedrockConfig config;
-    private final BedrockRuntimeClient client;
-    private final BedrockRuntimeAsyncClient asyncClient;
+    private volatile BedrockRuntimeClient client;
+    private volatile BedrockRuntimeAsyncClient asyncClient;
     private final ObjectMapper objectMapper;
     private final BedrockModelAdapter modelAdapter;
+    private final Object clientLock = new Object();
 
     public BedrockService(BedrockConfig config) {
         this.config = config;
@@ -186,7 +187,7 @@ public class BedrockService implements AutoCloseable {
                                            Runnable onComplete,
                                            Consumer<Throwable> onError) throws OpenAIException {
         // 添加重试机制
-        int maxRetries = 3;
+        int maxRetries = 5;  // 增加重试次数
         Exception lastException = null;
         
         for (int attempt = 0; attempt < maxRetries; attempt++) {
@@ -201,15 +202,28 @@ public class BedrockService implements AutoCloseable {
                     message.contains("Acquire operation took longer") ||
                     message.contains("connection pool") ||
                     message.contains("Unable to execute HTTP request") ||
+                    message.contains("ClosedChannelException") ||
+                    message.contains("An error occurred on the connection") ||
+                    message.contains("All streams will be closed") ||
                     message.contains("timeout"))) {
                     
                     if (attempt < maxRetries - 1) {
                         logger.warn("流式请求失败，尝试重试 ({}/{}): {}", 
                                    attempt + 1, maxRetries, message);
                         
-                        // 等待一段时间后重试
+                        // 如果是连接池相关错误，在第3次重试时重建客户端
+                        if (attempt == 2 && message != null && 
+                            (message.contains("ClosedChannelException") || 
+                             message.contains("An error occurred on the connection"))) {
+                            logger.warn("检测到连接池问题，重建客户端...");
+                            rebuildAsyncClient();
+                        }
+                        
+                        // 等待一段时间后重试（使用更长的退避时间）
                         try {
-                            Thread.sleep((attempt + 1) * 1000); // 指数退避
+                            long backoffTime = Math.min((long)Math.pow(2, attempt) * 1000, 10000); // 指数退避，最多10秒
+                            logger.info("等待 {} ms 后重试...", backoffTime);
+                            Thread.sleep(backoffTime);
                         } catch (InterruptedException ie) {
                             Thread.currentThread().interrupt();
                             throw new OpenAIException("重试被中断", ie);
@@ -225,6 +239,34 @@ public class BedrockService implements AutoCloseable {
         
         // 所有重试都失败
         throw new OpenAIException("流式请求失败，已重试 " + maxRetries + " 次", lastException);
+    }
+    
+    /**
+     * 重建异步客户端
+     */
+    private void rebuildAsyncClient() {
+        synchronized (clientLock) {
+            logger.info("重建 Bedrock 异步客户端...");
+            
+            // 关闭旧客户端
+            if (asyncClient != null) {
+                try {
+                    asyncClient.close();
+                } catch (Exception e) {
+                    logger.warn("关闭旧客户端时出错: {}", e.getMessage());
+                }
+            }
+            
+            // 创建新客户端
+            this.asyncClient = BedrockCredentialsIsolator.createIsolatedAsyncClient(
+                    config.getRegion(),
+                    config.getAccessKeyId(),
+                    config.getSecretAccessKey(),
+                    config.getSessionToken()
+            );
+            
+            logger.info("异步客户端重建完成");
+        }
     }
     
     /**
@@ -378,8 +420,9 @@ public class BedrockService implements AutoCloseable {
      */
     @Override
     public void close() {
-        try {
-            logger.debug("关闭 BedrockService，释放资源...");
+        synchronized (clientLock) {
+            try {
+                logger.debug("关闭 BedrockService，释放资源...");
             
             // 关闭同步客户端
             if (client != null) {
@@ -415,8 +458,9 @@ public class BedrockService implements AutoCloseable {
             }
             
             logger.debug("BedrockService 资源释放完成");
-        } catch (Exception e) {
-            logger.error("关闭 BedrockService 时发生错误", e);
+            } catch (Exception e) {
+                logger.error("关闭 BedrockService 时发生错误", e);
+            }
         }
     }
 }

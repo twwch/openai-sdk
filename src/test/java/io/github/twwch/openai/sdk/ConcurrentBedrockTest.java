@@ -35,6 +35,9 @@ public class ConcurrentBedrockTest {
     private static final AtomicLong totalResponseTime = new AtomicLong(0);
     private static final ConcurrentHashMap<String, Integer> errorMessages = new ConcurrentHashMap<>();
     private static final List<Long> connectionHoldTimes = new CopyOnWriteArrayList<>();
+    
+    // 共享的OpenAI客户端
+    private static OpenAI sharedService;
 
     public static void main(String[] args) throws Exception {
         System.out.println("=== Bedrock 并发连接池测试 ===");
@@ -56,11 +59,20 @@ public class ConcurrentBedrockTest {
             System.exit(1);
         }
 
+        // 创建共享的OpenAI客户端
+        sharedService = OpenAI.bedrock(region, accessKeyId, secretAccessKey, modelId);
+        
         // 显示配置信息
         System.out.println("配置信息:");
         System.out.println("使用模型: " + modelId);
         System.out.println("区域: " + region);
-        System.out.println("每次请求都会重新创建 OpenAI service 实例\n");
+        System.out.println("使用单个共享的 OpenAI service 实例\n");
+        System.out.println("注意: BedrockCredentialsIsolator 已优化连接池配置:");
+        System.out.println("  - 最大并发连接数: 100");
+        System.out.println("  - 连接获取超时: 60秒");
+        System.out.println("  - 最大等待队列: 200");
+        System.out.println("  - 连接复用时间: 10分钟");
+        System.out.println("  - 读取超时: 90秒\n");
 
         // 创建线程池
         ExecutorService executor = Executors.newFixedThreadPool(CONCURRENT_REQUESTS);
@@ -83,8 +95,8 @@ public class ConcurrentBedrockTest {
                         Thread.sleep((requestId / CONCURRENT_REQUESTS) * 200L);
                     }
                     
-                    // 执行请求（每次创建新的 service 实例）
-                    sendRequest(region, accessKeyId, secretAccessKey, modelId, requestId);
+                    // 执行请求（使用共享的 service 实例）
+                    sendRequest(sharedService, requestId);
                     
                 } catch (Exception e) {
                     System.err.println("[请求 #" + requestId + "] 意外错误: " + e.getMessage());
@@ -118,19 +130,28 @@ public class ConcurrentBedrockTest {
         // 关闭线程池
         executor.shutdown();
         executor.awaitTermination(5, TimeUnit.SECONDS);
+        
+        // 关闭共享的OpenAI客户端
+        try {
+            if (sharedService != null) {
+                sharedService.close();
+                System.out.println("\n共享客户端已关闭");
+            }
+        } catch (Exception e) {
+            System.err.println("关闭客户端时出错: " + e.getMessage());
+        }
 
         // 打印统计结果
         printStatistics(startTime, endTime);
     }
 
-    private static void sendRequest(String region, String accessKeyId, String secretAccessKey, String modelId, int requestId) {
+    private static void sendRequest(OpenAI service, int requestId) {
         long requestStartTime = System.currentTimeMillis();
         
-        try (// 使用 try-with-resources 确保资源释放
-             OpenAI service = OpenAI.bedrock(region, accessKeyId, secretAccessKey, modelId)) {
+        try {
             // 构建请求
             ChatCompletionRequest request = new ChatCompletionRequest();
-            request.setModel(modelId);
+            request.setModel("us.anthropic.claude-3-7-sonnet-20250219-v1:0"); // 模型ID已在service创建时配置
             List<ChatMessage> messages = new ArrayList<>();
             messages.add(ChatMessage.system("你是一个 helpful 的助手"));
             messages.add(ChatMessage.user("写一个 1000字左右的故事"));
