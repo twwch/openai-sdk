@@ -110,12 +110,15 @@ public class ImageUtils {
             
             logger.info("Successfully downloaded image, actual size: {} bytes", imageData.length);
             
-            // 如果图片超过5MB，进行压缩
-            if (imageData.length > MAX_IMAGE_SIZE) {
-                logger.info("Image size {} MB exceeds target size {} MB, attempting compression...", 
-                    imageData.length / (1024 * 1024), MAX_IMAGE_SIZE / (1024 * 1024));
+            // 检查原始图片大小，考虑base64编码后会增大约33%
+            // 如果原始图片超过3.7MB（base64后约5MB），进行压缩
+            int maxOriginalSize = (int)(3.7 * 1024 * 1024); // 3.7MB原始大小，base64后约4.9MB
+            if (imageData.length > maxOriginalSize) {
+                logger.info("Image size {} MB exceeds safe size {} MB for base64 encoding, attempting compression...", 
+                    imageData.length / (1024.0 * 1024.0), maxOriginalSize / (1024.0 * 1024.0));
                 try {
-                    byte[] compressedData = compressImage(imageData, SAFE_IMAGE_SIZE); // 使用安全大小4MB
+                    // 压缩到3.5MB以内，base64后约4.6MB，留足够余量
+                    byte[] compressedData = compressImage(imageData, (int)(3.5 * 1024 * 1024));
                     if (compressedData != null && compressedData.length > 0) {
                         if (compressedData.length < imageData.length) {
                             logger.info("Successfully compressed image from {} MB to {} MB", 
@@ -737,9 +740,11 @@ public class ImageUtils {
                 return base64Data;
             }
             
-            // 压缩图片（base64编码后会增大约33%，所以目标大小要更小）
-            // 考虑到data URI前缀，目标大小设置为最大值的70%
-            int targetSize = (int)(maxSizeBytes * 0.70); // 留出30%空间给base64编码和前缀
+            // 压缩图片
+            // maxSizeBytes是最终base64字符串的大小限制
+            // base64编码会增大约33%（4/3倍），所以原始图片大小应该是：maxSizeBytes * 3/4
+            // 再考虑到data URI前缀（约30-50字节），我们设置为maxSizeBytes * 0.72
+            int targetSize = (int)(maxSizeBytes * 0.72); // 原始图片目标大小
             byte[] compressedBytes = compressImage(imageBytes, targetSize);
             
             // 重新编码为Base64

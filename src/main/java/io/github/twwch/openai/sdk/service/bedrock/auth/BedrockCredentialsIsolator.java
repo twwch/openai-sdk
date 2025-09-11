@@ -97,7 +97,7 @@ public class BedrockCredentialsIsolator {
                         .maxPendingConnectionAcquires(200)             // 等待队列大小（支持更多排队请求）
                         
                         // 流式响应超时配置
-                        .readTimeout(Duration.ofMinutes(6))           // 读取超时：6min（支持长时间流式响应）
+                        .readTimeout(Duration.ofMinutes(10))           // 读取超时：10min（支持长时间流式响应）
                         .writeTimeout(Duration.ofSeconds(10))          // 写入超时：10秒
                         
                         // 连接复用和清理策略（优化为长期复用）
