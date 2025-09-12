@@ -23,6 +23,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 
 /**
@@ -192,48 +195,79 @@ public class BedrockService implements AutoCloseable {
         
         for (int attempt = 0; attempt < maxRetries; attempt++) {
             try {
-                return createChatCompletionStreamInternal(request, onChunk, onComplete, onError);
+                CompletableFuture<Void> future = createChatCompletionStreamInternal(request, onChunk, onComplete, onError);
+                
+                // 等待流完成，这样超时异常可以被捕获
+                try {
+                    // 给一个略长于内部超时的等待时间
+                    future.get(95, TimeUnit.SECONDS);
+                    return future;
+                } catch (TimeoutException te) {
+                    // 外部超时，取消内部操作
+                    future.cancel(true);
+                    throw new OpenAIException("流式请求超时（95秒）", te);
+                } catch (ExecutionException ee) {
+                    // 从ExecutionException中提取实际的异常
+                    Throwable cause = ee.getCause();
+                    if (cause instanceof Exception) {
+                        throw (Exception) cause;
+                    } else {
+                        throw new OpenAIException("流式请求执行失败", ee);
+                    }
+                }
+                
             } catch (Exception e) {
                 lastException = e;
                 String message = e.getMessage();
                 
-                // 判断是否是可重试的错误
-                if (message != null && (
+                // 判断是否是可重试的错误（包括超时）
+                boolean isRetryable = false;
+                if (e instanceof TimeoutException || 
+                    (e.getCause() != null && e.getCause() instanceof TimeoutException)) {
+                    isRetryable = true;
+                    logger.warn("流式请求超时，将进行重试");
+                } else if (message != null && (
                     message.contains("Acquire operation took longer") ||
                     message.contains("connection pool") ||
                     message.contains("Unable to execute HTTP request") ||
                     message.contains("ClosedChannelException") ||
                     message.contains("An error occurred on the connection") ||
                     message.contains("All streams will be closed") ||
-                    message.contains("timeout"))) {
+                    message.contains("timeout") ||
+                    message.contains("流式请求超时"))) {
+                    isRetryable = true;
+                }
+                
+                if (isRetryable && attempt < maxRetries - 1) {
+                    logger.warn("流式请求失败，尝试重试 ({}/{}): {}", 
+                               attempt + 1, maxRetries, message);
                     
-                    if (attempt < maxRetries - 1) {
-                        logger.warn("流式请求失败，尝试重试 ({}/{}): {}", 
-                                   attempt + 1, maxRetries, message);
-                        
-                        // 如果是连接池相关错误，在第3次重试时重建客户端
-                        if (attempt == 2 && message != null && 
-                            (message.contains("ClosedChannelException") || 
-                             message.contains("An error occurred on the connection"))) {
-                            logger.warn("检测到连接池问题，重建客户端...");
-                            rebuildAsyncClient();
-                        }
-                        
-                        // 等待一段时间后重试（使用更长的退避时间）
-                        try {
-                            long backoffTime = Math.min((long)Math.pow(2, attempt) * 1000, 10000); // 指数退避，最多10秒
-                            logger.info("等待 {} ms 后重试...", backoffTime);
-                            Thread.sleep(backoffTime);
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                            throw new OpenAIException("重试被中断", ie);
-                        }
-                        continue;
+                    // 如果是连接池相关错误，在第3次重试时重建客户端
+                    if (attempt == 2 && message != null && 
+                        (message.contains("ClosedChannelException") || 
+                         message.contains("An error occurred on the connection"))) {
+                        logger.warn("检测到连接池问题，重建客户端...");
+                        rebuildAsyncClient();
                     }
+                    
+                    // 等待一段时间后重试（使用更长的退避时间）
+                    try {
+                        long backoffTime = Math.min((long)Math.pow(2, attempt) * 1000, 10000); // 指数退避，最多10秒
+                        logger.info("等待 {} ms 后重试...", backoffTime);
+                        Thread.sleep(backoffTime);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new OpenAIException("重试被中断", ie);
+                    }
+                    continue;
                 }
                 
                 // 不可重试的错误或已达到最大重试次数
-                throw e;
+                if (e instanceof OpenAIException) {
+                    throw (OpenAIException) e;
+                } else {
+                    throw new OpenAIException("流式请求失败: " + e.getMessage(), e);
+                }
             }
         }
         
@@ -384,18 +418,8 @@ public class BedrockService implements AutoCloseable {
             });
             
             // 添加超时保护，防止连接永远不释放
-            streamCompletion.orTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
-                .exceptionally(throwable -> {
-                    if (throwable instanceof java.util.concurrent.TimeoutException) {
-                        logger.error("流式请求超时（90秒）");
-                        if (!hasError.getAndSet(true) && onError != null) {
-                            onError.accept(new OpenAIException("流式请求超时", throwable));
-                        }
-                    }
-                    return null;
-                });
-            
-            return streamCompletion;
+            // 不要在这里处理超时异常，让它传播到外层的重试逻辑
+            return streamCompletion.orTimeout(90, java.util.concurrent.TimeUnit.SECONDS);
 
         } catch (Exception e) {
             logger.error("Bedrock流式请求失败", e);
