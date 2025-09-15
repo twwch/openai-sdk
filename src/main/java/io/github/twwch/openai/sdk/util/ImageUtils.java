@@ -30,8 +30,8 @@ public class ImageUtils {
     // 简单的内存缓存，避免重复下载相同的图片
     private static final ConcurrentHashMap<String, CachedImage> IMAGE_CACHE = new ConcurrentHashMap<>();
     private static final long CACHE_EXPIRY_MS = TimeUnit.HOURS.toMillis(1); // 缓存1小时
-    private static final int MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 压缩目标大小5MB
-    private static final int SAFE_IMAGE_SIZE = 4 * 1024 * 1024; // 安全大小4MB（留出空间给base64编码）
+    private static final int MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 压缩目标大小2MB
+    private static final int SAFE_IMAGE_SIZE = (int)(1.5 * 1024 * 1024); // 安全大小1.5MB（留出空间给base64编码）
     private static final int MAX_DOWNLOAD_SIZE = Integer.parseInt(System.getProperty("openai.sdk.max.download.size", String.valueOf(50 * 1024 * 1024))); // 最大下载50MB，可通过系统属性配置
     private static final int MAX_IMAGE_DIMENSION = 8000; // Bedrock最大图片尺寸限制：8000像素
     private static final int CONNECT_TIMEOUT = 5000; // 连接超时5秒
@@ -127,7 +127,7 @@ public class ImageUtils {
                     // 根据当前超出的比例来决定压缩程度
                     double compressionRatio = (double)maxBase64Size / base64Size * 0.95; // 留5%余量
                     int targetSize = (int)(imageData.length * compressionRatio);
-                    targetSize = Math.min(targetSize, (int)(3.5 * 1024 * 1024)); // 最多压缩到3.5MB
+                    targetSize = Math.min(targetSize, (int)(1.8 * 1024 * 1024)); // 最多压缩到1.8MB
                     
                     byte[] compressedData = compressImage(imageData, targetSize);
                     if (compressedData != null && compressedData.length > 0 && compressedData.length < imageData.length) {

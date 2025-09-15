@@ -132,6 +132,8 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                         }
                         
                         // 处理所有内容部分
+                        int successfulImages = 0;
+                        int failedImages = 0;
                         for (ChatMessage.ContentPart part : parts) {
                             if ("text".equals(part.getType())) {
                                 ObjectNode textNode = objectMapper.createObjectNode();
@@ -158,7 +160,13 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                                     // 从downloadedImages中获取已下载的图片（已经在下载时压缩过了）
                                     base64Data = downloadedImages.get(url);
                                     if (base64Data == null) {
-                                        logger.error("Failed to download image: {}", url);
+                                        logger.error("Failed to download image: {}. Image might be too large or network error occurred.", url);
+                                        failedImages++;
+                                        // 添加一个文本说明，告知图片下载失败
+                                        ObjectNode errorTextNode = objectMapper.createObjectNode();
+                                        errorTextNode.put("type", "text");
+                                        errorTextNode.put("text", "[图片下载失败: " + url.substring(url.lastIndexOf('/') + 1) + "]");
+                                        contentArray.add(errorTextNode);
                                         continue;
                                     }
                                 }
@@ -172,10 +180,17 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                                     sourceNode.put("data", parts2[1]);
                                     imageNode.set("source", sourceNode);
                                     contentArray.add(imageNode);
+                                    successfulImages++;
                                 } else {
                                     logger.error("Failed to parse base64 data for image: {}", url);
+                                    failedImages++;
                                 }
                             }
+                        }
+                        
+                        if (failedImages > 0) {
+                            logger.warn("Successfully processed {} images, {} images failed to download or process", 
+                                successfulImages, failedImages);
                         }
                         
                         bedrockMessage.set("content", contentArray);
