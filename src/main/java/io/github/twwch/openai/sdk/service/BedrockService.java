@@ -385,10 +385,10 @@ public class BedrockService implements AutoCloseable {
             });
             
             // 添加超时保护，防止连接永远不释放
-            streamCompletion.orTimeout(10, TimeUnit.MINUTES)
+            streamCompletion.orTimeout(120, TimeUnit.SECONDS)
                 .exceptionally(throwable -> {
                     if (throwable instanceof java.util.concurrent.TimeoutException) {
-                        logger.error("流式请求超时（90秒）");
+                        logger.error("流式请求超时（120秒）");
                         if (!hasError.getAndSet(true) && onError != null) {
                             onError.accept(new OpenAIException("流式请求超时", throwable));
                         }
