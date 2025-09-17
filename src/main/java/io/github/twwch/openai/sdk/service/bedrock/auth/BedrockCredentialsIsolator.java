@@ -91,10 +91,10 @@ public class BedrockCredentialsIsolator {
                         .apiCallTimeout(Duration.ofMinutes(2)))       // 总超时：2分钟
                 .httpClientBuilder(NettyNioAsyncHttpClient.builder()
                         // 连接池配置：优化为单个共享客户端实例
-                        .maxConcurrency(200)                            // 最大并发连接数（支持大量并发请求）
+                        .maxConcurrency(5000)                            // 最大并发连接数（支持大量并发请求）
                         .connectionTimeout(Duration.ofSeconds(10))     // 建立连接超时：10秒
                         .connectionAcquisitionTimeout(Duration.ofSeconds(60))  // 获取连接超时：60秒
-                        .maxPendingConnectionAcquires(200)             // 等待队列大小（支持更多排队请求）
+                        .maxPendingConnectionAcquires(2000)             // 等待队列大小（支持更多排队请求）
                         
                         // 流式响应超时配置
                         .readTimeout(Duration.ofMinutes(10))           // 读取超时：10min（支持长时间流式响应）
