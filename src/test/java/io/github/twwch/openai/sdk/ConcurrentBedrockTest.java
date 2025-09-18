@@ -19,11 +19,24 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class ConcurrentBedrockTest {
 
-    // 测试配置
-    private static final int CONCURRENT_REQUESTS = 30;  // 并发请求数
-    private static final int TOTAL_REQUESTS = 100;      // 总请求数
-    private static final boolean USE_STREAMING = true;  // 是否使用流式响应
-    private static final int STREAM_TIMEOUT_SECONDS = 90; // 流式响应超时时间（秒）
+    // 测试配置（支持通过 -Dbedrock.concurrent.requests / -Dbedrock.total.requests 等覆盖）
+    private static final int DEFAULT_CONCURRENT_REQUESTS = 30;          // 默认并发请求数
+    private static final int DEFAULT_TOTAL_REQUESTS = 100;              // 默认总请求数
+    private static final boolean DEFAULT_USE_STREAMING = true;          // 默认使用流式响应
+    private static final int DEFAULT_STREAM_TIMEOUT_SECONDS = 90;       // 默认流式响应超时时间（秒）
+
+    private static final int CONCURRENT_REQUESTS =
+            Integer.getInteger("bedrock.concurrent.requests", DEFAULT_CONCURRENT_REQUESTS);
+    private static final int TOTAL_REQUESTS =
+            Integer.getInteger("bedrock.total.requests", DEFAULT_TOTAL_REQUESTS);
+    private static final boolean USE_STREAMING =
+            Boolean.parseBoolean(System.getProperty("bedrock.use.streaming", String.valueOf(DEFAULT_USE_STREAMING)));
+    private static final int STREAM_TIMEOUT_SECONDS =
+            Integer.getInteger("bedrock.stream.timeout.seconds", DEFAULT_STREAM_TIMEOUT_SECONDS);
+
+    private static final int DEFAULT_MAX_WAIT_MINUTES = 10;            // 默认全局最大等待时间（分钟）
+    private static final int MAX_WAIT_MINUTES =
+            Integer.getInteger("bedrock.test.max.minutes", DEFAULT_MAX_WAIT_MINUTES);
 
     // 统计信息
     private static final AtomicInteger successCount = new AtomicInteger(0);
@@ -35,11 +48,13 @@ public class ConcurrentBedrockTest {
     private static final AtomicLong totalResponseTime = new AtomicLong(0);
     private static final ConcurrentHashMap<String, Integer> errorMessages = new ConcurrentHashMap<>();
     private static final List<Long> connectionHoldTimes = new CopyOnWriteArrayList<>();
-    
+
     // 共享的OpenAI客户端
     private static OpenAI sharedService;
 
     public static void main(String[] args) throws Exception {
+        System.out.println("最大等待时间(分钟): " + MAX_WAIT_MINUTES);
+
         System.out.println("=== Bedrock 并发连接池测试 ===");
         System.out.println("并发请求数: " + CONCURRENT_REQUESTS);
         System.out.println("总请求数: " + TOTAL_REQUESTS);
@@ -52,27 +67,29 @@ public class ConcurrentBedrockTest {
         String secretAccessKey = System.getProperty("bedrock.secretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"));
         String modelId = System.getProperty("bedrock.modelId", "us.anthropic.claude-3-7-sonnet-20250219-v1:0");
 
-        if (accessKeyId == null || secretAccessKey == null) {
-            System.err.println("请设置AWS凭证：");
-            System.err.println("  通过系统属性: -Dbedrock.accessKeyId=xxx -Dbedrock.secretAccessKey=xxx");
-            System.err.println("  或通过环境变量: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY");
-            System.exit(1);
+        // 创建共享的OpenAI客户端
+        if (accessKeyId != null && secretAccessKey != null) {
+            // 使用显式提供的凭证
+            System.out.println("使用显式提供的AWS凭证");
+            sharedService = OpenAI.bedrock(region, accessKeyId, secretAccessKey, modelId);
+        } else {
+            // 使用默认凭证链（~/.aws/credentials, 环境变量, IAM角色等）
+            System.out.println("使用默认AWS凭证链（~/.aws/credentials, 环境变量, IAM角色等）");
+            sharedService = OpenAI.bedrock(region, modelId);
         }
 
-        // 创建共享的OpenAI客户端
-        sharedService = OpenAI.bedrock(region, accessKeyId, secretAccessKey, modelId);
-        
         // 显示配置信息
         System.out.println("配置信息:");
         System.out.println("使用模型: " + modelId);
         System.out.println("区域: " + region);
         System.out.println("使用单个共享的 OpenAI service 实例\n");
         System.out.println("注意: BedrockCredentialsIsolator 已优化连接池配置:");
-        System.out.println("  - 最大并发连接数: 100");
+        System.out.println("  - 同步客户端最大连接数: 50");
+        System.out.println("  - 异步客户端最大并发数: 20");
         System.out.println("  - 连接获取超时: 60秒");
-        System.out.println("  - 最大等待队列: 200");
-        System.out.println("  - 连接复用时间: 10分钟");
-        System.out.println("  - 读取超时: 90秒\n");
+        System.out.println("  - 最大等待队列: 50");
+        System.out.println("  - 连接复用时间: 3分钟");
+        System.out.println("  - 读取超时: 15分钟\n");
 
         // 创建线程池
         ExecutorService executor = Executors.newFixedThreadPool(CONCURRENT_REQUESTS);
@@ -82,22 +99,22 @@ public class ConcurrentBedrockTest {
         // 提交任务
         System.out.println("准备发送 " + TOTAL_REQUESTS + " 个请求...\n");
         List<Future<?>> futures = new ArrayList<>();
-        
+
         for (int i = 0; i < TOTAL_REQUESTS; i++) {
             final int requestId = i + 1;
             Future<?> future = executor.submit(() -> {
                 try {
                     // 等待开始信号
                     startLatch.await();
-                    
+
                     // 添加小延迟，避免瞬间发送太多请求
                     if (requestId > CONCURRENT_REQUESTS) {
                         Thread.sleep((requestId / CONCURRENT_REQUESTS) * 200L);
                     }
-                    
+
                     // 执行请求（使用共享的 service 实例）
                     sendRequest(sharedService, requestId);
-                    
+
                 } catch (Exception e) {
                     System.err.println("[请求 #" + requestId + "] 意外错误: " + e.getMessage());
                     failureCount.incrementAndGet();
@@ -113,12 +130,12 @@ public class ConcurrentBedrockTest {
         System.out.println("开始发送请求...\n");
         startLatch.countDown();  // 释放所有线程
 
-        // 等待所有请求完成（最多等待10分钟）
-        boolean completed = completeLatch.await(10, TimeUnit.MINUTES);
+        // 等待所有请求完成（最多等待X分钟，可通过 -Dbedrock.test.max.minutes 配置）
+        boolean completed = completeLatch.await(MAX_WAIT_MINUTES, TimeUnit.MINUTES);
         long endTime = System.currentTimeMillis();
 
         if (!completed) {
-            System.err.println("\n警告：部分请求未在10分钟内完成！");
+            System.err.println("\n警告：部分请求未在" + MAX_WAIT_MINUTES + "分钟内完成！");
             // 取消未完成的任务
             for (Future<?> future : futures) {
                 if (!future.isDone()) {
@@ -130,7 +147,7 @@ public class ConcurrentBedrockTest {
         // 关闭线程池
         executor.shutdown();
         executor.awaitTermination(5, TimeUnit.SECONDS);
-        
+
         // 关闭共享的OpenAI客户端
         try {
             if (sharedService != null) {
@@ -147,7 +164,7 @@ public class ConcurrentBedrockTest {
 
     private static void sendRequest(OpenAI service, int requestId) {
         long requestStartTime = System.currentTimeMillis();
-        
+
         try {
             // 构建请求
             ChatCompletionRequest request = new ChatCompletionRequest();
@@ -165,12 +182,15 @@ public class ConcurrentBedrockTest {
                 StringBuilder response = new StringBuilder();
                 AtomicReference<Throwable> error = new AtomicReference<>();
                 AtomicBoolean streamCompleted = new AtomicBoolean(false);
-                
+                // 确保每个请求的活跃连接只释放一次，成功/失败只统计一次
+                AtomicBoolean connectionReleased = new AtomicBoolean(false);
+                AtomicBoolean counted = new AtomicBoolean(false);
+
                 // 记录连接开始时间
                 long connectionStartTime = System.currentTimeMillis();
                 int currentActive = activeConnections.incrementAndGet();
                 updatePeakConnections(currentActive);
-                
+
                 System.out.printf("[请求 #%d] 开始 (活跃连接: %d)\n", requestId, currentActive);
 
                 // 创建流式请求
@@ -189,13 +209,17 @@ public class ConcurrentBedrockTest {
                             long responseTime = System.currentTimeMillis() - requestStartTime;
                             long connectionHoldTime = System.currentTimeMillis() - connectionStartTime;
                             connectionHoldTimes.add(connectionHoldTime);
-                            
-                            int remainingActive = activeConnections.decrementAndGet();
+
+                            int remainingActiveAfter = connectionReleased.compareAndSet(false, true)
+                                    ? activeConnections.decrementAndGet()
+                                    : activeConnections.get();
                             totalResponseTime.addAndGet(responseTime);
-                            successCount.incrementAndGet();
-                            
-                            System.out.printf("[请求 #%d] ✓ 成功 (耗时: %dms, 连接保持: %dms, 剩余活跃: %d) - 响应: %s\n", 
-                                requestId, responseTime, connectionHoldTime, remainingActive,
+                            if (counted.compareAndSet(false, true)) {
+                                successCount.incrementAndGet();
+                            }
+
+                            System.out.printf("[请求 #%d] ✓ 成功 (耗时: %dms, 连接保持: %dms, 剩余活跃: %d) - 响应: %s\n",
+                                requestId, responseTime, connectionHoldTime, remainingActiveAfter,
                                 response.toString().replace("\n", " ").substring(0, Math.min(response.length(), 50)));
                             streamLatch.countDown();
                         },
@@ -204,9 +228,32 @@ public class ConcurrentBedrockTest {
                             error.set(e);
                             long connectionHoldTime = System.currentTimeMillis() - connectionStartTime;
                             connectionHoldTimes.add(connectionHoldTime);
-                            int remainingActive = activeConnections.decrementAndGet();
-                            
-                            handleError(requestId, e, requestStartTime, remainingActive);
+
+                            int remainingActiveAfter = connectionReleased.compareAndSet(false, true)
+                                    ? activeConnections.decrementAndGet()
+                                    : activeConnections.get();
+                            long responseTime = System.currentTimeMillis() - requestStartTime;
+                            boolean firstCount = counted.compareAndSet(false, true);
+                            if (firstCount) {
+                                failureCount.incrementAndGet();
+                            }
+
+                            String errorMsg = e.getMessage();
+                            boolean isPoolError = errorMsg != null && (errorMsg.contains("Acquire operation took longer") ||
+                                    errorMsg.contains("connection pool") || errorMsg.contains("ClosedChannelException"));
+                            if (firstCount && isPoolError) {
+                                connectionPoolErrorCount.incrementAndGet();
+                            }
+                            if (isPoolError) {
+                                System.err.printf("[请求 #%d] ✗ 连接池错误 (耗时: %dms, 剩余活跃: %d) - %s\n",
+                                        requestId, responseTime, remainingActiveAfter, errorMsg);
+                            } else {
+                                System.err.printf("[请求 #%d] ✗ 失败 (耗时: %dms, 剩余活跃: %d) - %s\n",
+                                        requestId, responseTime, remainingActiveAfter, errorMsg);
+                            }
+                            if (firstCount) {
+                                errorMessages.merge(e.getClass().getSimpleName(), 1, Integer::sum);
+                            }
                             streamLatch.countDown();
                         }
                 );
@@ -215,44 +262,62 @@ public class ConcurrentBedrockTest {
                 boolean completed = false;
                 try {
                     completed = streamLatch.await(STREAM_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-                    
+
                     if (!completed) {
                         System.err.printf("[请求 #%d] ✗ 超时 - 流式响应未在%d秒内完成\n", requestId, STREAM_TIMEOUT_SECONDS);
-                        failureCount.incrementAndGet();
+                        if (counted.compareAndSet(false, true)) {
+                            failureCount.incrementAndGet();
+                        }
                         streamNotCompletedCount.incrementAndGet();
+
+                        // 超时情况下，确保连接计数正确递减（且只递减一次）
+                        if (connectionReleased.compareAndSet(false, true)) {
+                            int remainingActive = activeConnections.decrementAndGet();
+                            System.err.printf("[请求 #%d] 超时强制释放连接 (剩余活跃: %d)\n", requestId, remainingActive);
+                        }
                     }
-                    
-                } finally {
-                    // 确保连接计数正确递减
-                    if (!streamCompleted.get() && !completed) {
+
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    System.err.printf("[请求 #%d] ✗ 被中断\n", requestId);
+                    if (counted.compareAndSet(false, true)) {
+                        failureCount.incrementAndGet();
+                    }
+
+                    // 中断情况下，确保连接计数正确递减（且只递减一次）
+                    if (connectionReleased.compareAndSet(false, true)) {
                         int remainingActive = activeConnections.decrementAndGet();
-                        System.err.printf("[请求 #%d] 强制释放连接 (剩余活跃: %d)\n", requestId, remainingActive);
+                        System.err.printf("[请求 #%d] 中断强制释放连接 (剩余活跃: %d)\n", requestId, remainingActive);
                     }
                 }
-                
+
             } else {
                 // 非流式请求
                 int currentActive = activeConnections.incrementAndGet();
                 updatePeakConnections(currentActive);
-                
+
+                boolean decremented = false;
                 try {
                     ChatCompletionResponse response = service.createChatCompletion(request);
-                    
+
                     long responseTime = System.currentTimeMillis() - requestStartTime;
                     totalResponseTime.addAndGet(responseTime);
                     successCount.incrementAndGet();
-                    
+
                     String content = response.getChoices().get(0).getMessage().getContentAsString();
                     int remainingActive = activeConnections.decrementAndGet();
-                    
-                    System.out.printf("[请求 #%d] ✓ 成功 (耗时: %dms, 剩余活跃: %d) - 响应: %s\n", 
+                    decremented = true;
+
+                    System.out.printf("[请求 #%d] ✓ 成功 (耗时: %dms, 剩余活跃: %d) - 响应: %s\n",
                         requestId, responseTime, remainingActive,
                         content.replace("\n", " ").substring(0, Math.min(content.length(), 50)));
                 } finally {
-                    activeConnections.decrementAndGet();
+                    if (!decremented) {
+                        activeConnections.decrementAndGet();
+                    }
                 }
             }
-            
+
         } catch (Exception e) {
             handleError(requestId, e, requestStartTime, activeConnections.get());
         }
@@ -261,23 +326,23 @@ public class ConcurrentBedrockTest {
     private static void handleError(int requestId, Throwable e, long startTime, int remainingActive) {
         long responseTime = System.currentTimeMillis() - startTime;
         failureCount.incrementAndGet();
-        
+
         String errorMsg = e.getMessage();
-        if (errorMsg != null && (errorMsg.contains("Acquire operation took longer than") || 
-                                 errorMsg.contains("connection pool") || 
+        if (errorMsg != null && (errorMsg.contains("Acquire operation took longer than") ||
+                                 errorMsg.contains("connection pool") ||
                                  errorMsg.contains("ClosedChannelException"))) {
             connectionPoolErrorCount.incrementAndGet();
-            System.err.printf("[请求 #%d] ✗ 连接池错误 (耗时: %dms, 剩余活跃: %d) - %s\n", 
+            System.err.printf("[请求 #%d] ✗ 连接池错误 (耗时: %dms, 剩余活跃: %d) - %s\n",
                 requestId, responseTime, remainingActive, errorMsg);
         } else {
-            System.err.printf("[请求 #%d] ✗ 失败 (耗时: %dms, 剩余活跃: %d) - %s\n", 
+            System.err.printf("[请求 #%d] ✗ 失败 (耗时: %dms, 剩余活跃: %d) - %s\n",
                 requestId, responseTime, remainingActive, errorMsg);
         }
-        
+
         // 统计错误类型
         errorMessages.merge(e.getClass().getSimpleName(), 1, Integer::sum);
     }
-    
+
     private static void updatePeakConnections(int current) {
         int peak = peakConnections.get();
         while (current > peak) {
@@ -292,14 +357,14 @@ public class ConcurrentBedrockTest {
         System.out.println("\n=============================");
         System.out.println("=== 测试结果统计 ===");
         System.out.println("=============================");
-        
+
         int total = successCount.get() + failureCount.get();
         double successRate = total > 0 ? (successCount.get() * 100.0 / total) : 0;
         long totalTime = endTime - startTime;
-        double avgResponseTime = successCount.get() > 0 ? 
+        double avgResponseTime = successCount.get() > 0 ?
             (totalResponseTime.get() / (double) successCount.get()) : 0;
         double throughput = total > 0 ? (total * 1000.0 / totalTime) : 0;
-        
+
         System.out.printf("总请求数: %d\n", TOTAL_REQUESTS);
         System.out.printf("完成请求: %d\n", total);
         System.out.printf("成功: %d (%.1f%%)\n", successCount.get(), successRate);
@@ -307,11 +372,11 @@ public class ConcurrentBedrockTest {
         System.out.printf("连接池错误: %d\n", connectionPoolErrorCount.get());
         System.out.printf("流未完成数: %d\n", streamNotCompletedCount.get());
         System.out.println();
-        
+
         System.out.println("连接池统计:");
         System.out.printf("峰值并发连接: %d\n", peakConnections.get());
         System.out.printf("最终活跃连接: %d\n", activeConnections.get());
-        
+
         if (!connectionHoldTimes.isEmpty()) {
             long avgHoldTime = connectionHoldTimes.stream()
                 .mapToLong(Long::longValue)
@@ -319,43 +384,43 @@ public class ConcurrentBedrockTest {
             System.out.printf("平均连接保持时间: %d ms\n", avgHoldTime);
         }
         System.out.println();
-        
+
         System.out.printf("总耗时: %.1f 秒\n", totalTime / 1000.0);
         System.out.printf("平均响应时间: %.0f ms\n", avgResponseTime);
         System.out.printf("吞吐量: %.1f 请求/秒\n", throughput);
-        
+
         if (!errorMessages.isEmpty()) {
             System.out.println("\n错误类型统计:");
-            errorMessages.forEach((error, count) -> 
+            errorMessages.forEach((error, count) ->
                 System.out.printf("  %s: %d 次\n", error, count));
         }
-        
+
         System.out.println("\n=============================");
-        
+
         // 判断测试是否通过
         boolean hasConnectionLeak = activeConnections.get() > 0;
         boolean hasPoolErrors = connectionPoolErrorCount.get() > 0;
         boolean hasHighFailureRate = failureCount.get() > TOTAL_REQUESTS * 0.1;
         boolean hasIncompleteStreams = streamNotCompletedCount.get() > 0;
-        
+
         if (hasConnectionLeak) {
             System.err.println("❌ 测试失败: 检测到连接泄漏!");
             System.err.println("   仍有 " + activeConnections.get() + " 个连接未释放。");
         }
-        
+
         if (hasPoolErrors) {
             System.err.println("❌ 测试失败: 出现了 " + connectionPoolErrorCount.get() + " 次连接池错误!");
             System.err.println("   请检查连接池配置和流式响应的资源释放。");
         }
-        
+
         if (hasIncompleteStreams) {
             System.err.println("⚠️  测试警告: " + streamNotCompletedCount.get() + " 个流式请求未正常完成");
         }
-        
+
         if (hasHighFailureRate) {
             System.err.println("⚠️  测试警告: 失败率较高 (" + String.format("%.1f%%", 100 - successRate) + ")");
         }
-        
+
         if (!hasConnectionLeak && !hasPoolErrors && !hasHighFailureRate) {
             System.out.println("✅ 测试通过: 连接池管理正常，没有资源泄漏!");
         }

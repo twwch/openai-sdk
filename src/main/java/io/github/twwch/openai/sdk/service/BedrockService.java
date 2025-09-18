@@ -45,23 +45,38 @@ public class BedrockService implements AutoCloseable {
 
         logger.debug("初始化Bedrock服务 - 区域: {}, 模型: {}", config.getRegion(), config.getModelId());
 
-        // 验证凭证
-        validateCredentials();
+        // 检查是否使用默认凭证
+        boolean useDefaultCredentials = (config.getAccessKeyId() == null || config.getSecretAccessKey() == null);
 
-        // 使用隔离器创建客户端，确保完全隔离AWS环境凭证
-        this.client = BedrockCredentialsIsolator.createIsolatedClient(
-                config.getRegion(),
-                config.getAccessKeyId(),
-                config.getSecretAccessKey(),
-                config.getSessionToken()
-        );
+        if (useDefaultCredentials) {
+            logger.info("使用默认AWS凭证链（~/.aws/credentials, 环境变量, IAM角色等）");
 
-        this.asyncClient = BedrockCredentialsIsolator.createIsolatedAsyncClient(
-                config.getRegion(),
-                config.getAccessKeyId(),
-                config.getSecretAccessKey(),
-                config.getSessionToken()
-        );
+            // 使用默认凭证创建客户端
+            this.client = BedrockCredentialsIsolator.createIsolatedClientWithDefaultCredentials(
+                    config.getRegion()
+            );
+
+            this.asyncClient = BedrockCredentialsIsolator.createIsolatedAsyncClientWithDefaultCredentials(
+                    config.getRegion()
+            );
+        } else {
+            logger.info("使用显式提供的AWS凭证");
+
+            // 使用隔离器创建客户端，确保完全隔离AWS环境凭证
+            this.client = BedrockCredentialsIsolator.createIsolatedClient(
+                    config.getRegion(),
+                    config.getAccessKeyId(),
+                    config.getSecretAccessKey(),
+                    config.getSessionToken()
+            );
+
+            this.asyncClient = BedrockCredentialsIsolator.createIsolatedAsyncClient(
+                    config.getRegion(),
+                    config.getAccessKeyId(),
+                    config.getSecretAccessKey(),
+                    config.getSessionToken()
+            );
+        }
 
         // 创建模型适配器
         this.modelAdapter = BedrockModelAdapterFactory.createAdapter(config.getModelId());
@@ -69,18 +84,7 @@ public class BedrockService implements AutoCloseable {
         logger.info("Bedrock服务初始化成功 - 使用模型: {}", config.getModelId());
     }
 
-    /**
-     * 验证凭证是否已提供
-     */
-    private void validateCredentials() {
-        if (config.getAccessKeyId() == null || config.getSecretAccessKey() == null) {
-            throw new IllegalArgumentException(
-                    "Bedrock服务需要显式提供AWS凭证。" +
-                            "请通过 OpenAI.bedrock(region, accessKeyId, secretAccessKey, modelId) 提供凭证。"
-            );
-        }
 
-    }
 
     /**
      * 列出可用模型
@@ -248,7 +252,7 @@ public class BedrockService implements AutoCloseable {
     private void rebuildAsyncClient() {
         synchronized (clientLock) {
             logger.info("重建 Bedrock 异步客户端...");
-            
+
             // 关闭旧客户端
             if (asyncClient != null) {
                 try {
@@ -257,15 +261,25 @@ public class BedrockService implements AutoCloseable {
                     logger.warn("关闭旧客户端时出错: {}", e.getMessage());
                 }
             }
-            
-            // 创建新客户端
-            this.asyncClient = BedrockCredentialsIsolator.createIsolatedAsyncClient(
-                    config.getRegion(),
-                    config.getAccessKeyId(),
-                    config.getSecretAccessKey(),
-                    config.getSessionToken()
-            );
-            
+
+            // 检查是否使用默认凭证
+            boolean useDefaultCredentials = (config.getAccessKeyId() == null || config.getSecretAccessKey() == null);
+
+            if (useDefaultCredentials) {
+                // 使用默认凭证重建客户端
+                this.asyncClient = BedrockCredentialsIsolator.createIsolatedAsyncClientWithDefaultCredentials(
+                        config.getRegion()
+                );
+            } else {
+                // 使用显式凭证重建客户端
+                this.asyncClient = BedrockCredentialsIsolator.createIsolatedAsyncClient(
+                        config.getRegion(),
+                        config.getAccessKeyId(),
+                        config.getSecretAccessKey(),
+                        config.getSessionToken()
+                );
+            }
+
             logger.info("异步客户端重建完成");
         }
     }
