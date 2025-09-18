@@ -125,3 +125,80 @@ try {
 ## 完整示例
 
 参见 `src/main/java/io/github/twwch/openai/sdk/example/BedrockExample.java`
+
+## 并发测试脚本
+
+### 安装 Maven (macOS)
+
+```bash
+# 使用 Homebrew 安装 Maven
+brew install maven
+
+# 验证安装
+mvn --version
+```
+
+### 运行并发测试
+
+```bash
+# 1. 编译项目
+mvn clean compile test-compile
+env JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-11.0.2.jdk/Contents/Home mvn clean compile test-compile
+
+# 2. 运行并发测试 (使用 aws configure 配置的凭证)
+env JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-11.0.2.jdk/Contents/Home && java -cp "target/classes:target/test-classes:$(mvn dependency:build-classpath -Dmdep.outputFile=/dev/stdout -q)" \
+  -Dbedrock.region=us-west-2 \
+  -Dbedrock.concurrent.requests=10 \
+  -Dbedrock.total.requests=50 \
+  -Dbedrock.modelId=us.anthropic.claude-3-7-sonnet-20250219-v1:0 \
+  io.github.twwch.openai.sdk.ConcurrentBedrockTest
+
+nohup env JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-11.0.2.jdk/Contents/Home && java \
+  -Djavax.net.ssl.trustStore=/Library/Java/JavaVirtualMachines/jdk-11.0.2.jdk/Contents/Home/lib/security/cacerts \
+  -Djavax.net.ssl.trustStorePassword=changeit \
+  -Djdk.tls.client.protocols=TLSv1.2 \
+  -cp "target/classes:target/test-classes:$(mvn dependency:build-classpath -Dmdep.outputFile=/dev/stdout -q)" \
+  -Dbedrock.region=us-west-2 \
+  -Dbedrock.concurrent.requests=3 \
+  -Dbedrock.total.requests=1000 \
+  -Dbedrock.http.maxConcurrency=20 \
+  -Dbedrock.test.max.minutes=600 \
+  -Dbedrock.http.acquireTimeoutSeconds=30 \
+  -Dbedrock.http.maxPendingAcquires=20 \
+  -Dbedrock.modelId=us.anthropic.claude-3-7-sonnet-20250219-v1:0 \
+  io.github.twwch.openai.sdk.ConcurrentBedrockTest > >(tee -a "log_$(date +%Y%m%d_%H%M%S).log") 2>&1 &
+
+# 3. 或者使用指定的凭证运行
+java -cp "target/classes:target/test-classes:$(mvn dependency:build-classpath -Dmdep.outputFile=/dev/stdout -q)" \
+  -Dbedrock.region=us-west-2 \
+  -Dbedrock.accessKeyId=YOUR_ACCESS_KEY \
+  -Dbedrock.secretAccessKey=YOUR_SECRET_KEY \
+  -Dbedrock.modelId=us.anthropic.claude-3-7-sonnet-20250219-v1:0 \
+  io.github.twwch.openai.sdk.ConcurrentBedrockTest
+```
+
+测试将模拟30个并发请求，验证连接池管理和资源释放是否正常。
+
+### 连接池问题排查
+
+如果遇到连接池相关错误（如 "Acquire operation took longer than the configured maximum time"），可以：
+
+1. **降低并发数**：
+```bash
+# 减少并发请求数量
+java -cp "..." \
+  -Dbedrock.concurrent.requests=10 \
+  -Dbedrock.total.requests=50 \
+  io.github.twwch.openai.sdk.ConcurrentBedrockTest
+```
+
+2. **检查连接池配置**：
+   - 同步客户端最大连接数: 50
+   - 异步客户端最大并发数: 20
+   - 连接获取超时: 60秒
+   - 连接生存时间: 3分钟
+
+3. **优化测试参数**：
+   - 减少 `CONCURRENT_REQUESTS` (默认30)
+   - 减少 `TOTAL_REQUESTS` (默认100)
+   - 增加请求间隔时间
