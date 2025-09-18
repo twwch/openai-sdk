@@ -162,10 +162,10 @@ public class BedrockCredentialsIsolator {
         // 构建隔离的异步客户端
         // 优化连接池配置以支持高并发流式请求
         // 允许通过系统属性覆盖异步HTTP客户端配置
-        int maxConcurrency = Integer.getInteger("bedrock.http.maxConcurrency", 20);
-        int connectionTimeoutSeconds = Integer.getInteger("bedrock.http.connectionTimeoutSeconds", 15);
+        int maxConcurrency = Integer.getInteger("bedrock.http.maxConcurrency", 5000);
+        int connectionTimeoutSeconds = Integer.getInteger("bedrock.http.connectionTimeoutSeconds", 60);
         int acquireTimeoutSeconds = Integer.getInteger("bedrock.http.acquireTimeoutSeconds", 60);
-        int maxPending = Integer.getInteger("bedrock.http.maxPendingAcquires", 50);
+        int maxPending = Integer.getInteger("bedrock.http.maxPendingAcquires", 2000);
         int readTimeoutMinutes = Integer.getInteger("bedrock.http.readTimeoutMinutes", 15);
         int writeTimeoutSeconds = Integer.getInteger("bedrock.http.writeTimeoutSeconds", 30);
         int ttlMinutes = Integer.getInteger("bedrock.http.ttlMinutes", 3);
@@ -179,18 +179,18 @@ public class BedrockCredentialsIsolator {
                 .httpClientBuilder(NettyNioAsyncHttpClient.builder()
                         // 连接池配置：进一步降低并发数，确保稳定性
 
-                        .maxConcurrency(20)                            // 进一步降低最大并发连接数
-                        .connectionTimeout(Duration.ofSeconds(15))     // 增加建立连接超时：15秒
-                        .connectionAcquisitionTimeout(Duration.ofSeconds(60))  // 增加获取连接超时：60秒
-                        .maxPendingConnectionAcquires(50)              // 进一步降低等待队列大小
+                        .maxConcurrency(maxConcurrency)                            // 进一步降低最大并发连接数
+                        .connectionTimeout(Duration.ofSeconds(connectionTimeoutSeconds))     // 增加建立连接超时：15秒
+                        .connectionAcquisitionTimeout(Duration.ofSeconds(acquireTimeoutSeconds))  // 增加获取连接超时：60秒
+                        .maxPendingConnectionAcquires(maxPending)              // 进一步降低等待队列大小
 
                         // 流式响应超时配置
-                        .readTimeout(Duration.ofMinutes(15))           // 增加读取超时：15min（支持更长时间流式响应）
-                        .writeTimeout(Duration.ofSeconds(30))          // 增加写入超时：30秒
+                        .readTimeout(Duration.ofMinutes(readTimeoutMinutes))           // 增加读取超时：15min（支持更长时间流式响应）
+                        .writeTimeout(Duration.ofSeconds(writeTimeoutSeconds))          // 增加写入超时：30秒
 
                         // 连接复用和清理策略（更保守的配置）
-                        .connectionTimeToLive(Duration.ofMinutes(3))   // 进一步降低连接生存时间：3分钟
-                        .connectionMaxIdleTime(Duration.ofSeconds(20)) // 降低空闲连接保持：20秒
+                        .connectionTimeToLive(Duration.ofMinutes(ttlMinutes))   // 进一步降低连接生存时间：3分钟
+                        .connectionMaxIdleTime(Duration.ofSeconds(maxIdleSeconds)) // 降低空闲连接保持：30秒
                         .useIdleConnectionReaper(true))                // 启用空闲连接清理
                 .credentialsProvider(credentialsProvider);
 
