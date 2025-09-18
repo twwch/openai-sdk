@@ -101,10 +101,10 @@ public class BedrockCredentialsIsolator {
         // 构建隔离的异步客户端
         // 优化连接池配置以支持高并发流式请求
         // 允许通过系统属性覆盖异步HTTP客户端配置
-        int maxConcurrency = Integer.getInteger("bedrock.http.maxConcurrency", 20);
-        int connectionTimeoutSeconds = Integer.getInteger("bedrock.http.connectionTimeoutSeconds", 30);
+        int maxConcurrency = Integer.getInteger("bedrock.http.maxConcurrency", 5000);
+        int connectionTimeoutSeconds = Integer.getInteger("bedrock.http.connectionTimeoutSeconds", 60);
         int acquireTimeoutSeconds = Integer.getInteger("bedrock.http.acquireTimeoutSeconds", 60);
-        int maxPending = Integer.getInteger("bedrock.http.maxPendingAcquires", 50);
+        int maxPending = Integer.getInteger("bedrock.http.maxPendingAcquires", 2000);
         int readTimeoutMinutes = Integer.getInteger("bedrock.http.readTimeoutMinutes", 15);
         int writeTimeoutSeconds = Integer.getInteger("bedrock.http.writeTimeoutSeconds", 30);
         int ttlMinutes = Integer.getInteger("bedrock.http.ttlMinutes", 3);
