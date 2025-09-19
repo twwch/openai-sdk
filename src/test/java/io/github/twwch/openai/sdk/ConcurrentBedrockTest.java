@@ -16,12 +16,35 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Bedrock并发测试
  * 模拟30个并发请求，测试连接池是否会耗尽
+ *
+ * 可配置的系统属性：
+ * - bedrock.concurrent.requests: 并发请求数（默认30）
+ * - bedrock.total.requests: 总请求数（默认500）
+ * - bedrock.use.streaming: 是否使用流式响应（默认true）
+ * - bedrock.stream.timeout.seconds: 流式响应超时时间（默认90秒）
+ * - bedrock.test.max.minutes: 测试最大等待时间（默认10分钟）
+ *
+ * 连接池配置（通过BedrockCredentialsIsolator）：
+ * - bedrock.http.maxConcurrency: 最大并发连接数（默认5000）
+ * - bedrock.http.connectionTimeoutSeconds: 建立连接超时（默认60秒）
+ * - bedrock.http.acquireTimeoutSeconds: 获取连接超时（默认60秒）
+ * - bedrock.http.maxPendingAcquires: 最大等待队列（默认2000）
+ * - bedrock.http.readTimeoutMinutes: 读取超时（默认15分钟）
+ * - bedrock.http.writeTimeoutSeconds: 写入超时（默认30秒）
+ * - bedrock.http.ttlMinutes: 连接生存时间（默认3分钟）
+ * - bedrock.http.maxIdleSeconds: 空闲连接保持时间（默认20秒）
+ *
+ * API调用超时配置：
+ * - bedrock.api.attemptTimeoutMinutes: 单次API调用尝试超时（默认5分钟）
+ * - bedrock.api.callTimeoutMinutes: API调用总超时（默认10分钟）
+ * - bedrock.sync.api.attemptTimeoutMinutes: 同步客户端单次尝试超时（默认5分钟）
+ * - bedrock.sync.api.callTimeoutMinutes: 同步客户端总超时（默认10分钟）
  */
 public class ConcurrentBedrockTest {
 
     // 测试配置（支持通过 -Dbedrock.concurrent.requests / -Dbedrock.total.requests 等覆盖）
     private static final int DEFAULT_CONCURRENT_REQUESTS = 30;          // 默认并发请求数
-    private static final int DEFAULT_TOTAL_REQUESTS = 100;              // 默认总请求数
+    private static final int DEFAULT_TOTAL_REQUESTS = 500;              // 默认总请求数
     private static final boolean DEFAULT_USE_STREAMING = true;          // 默认使用流式响应
     private static final int DEFAULT_STREAM_TIMEOUT_SECONDS = 90;       // 默认流式响应超时时间（秒）
 
@@ -85,11 +108,13 @@ public class ConcurrentBedrockTest {
         System.out.println("使用单个共享的 OpenAI service 实例\n");
         System.out.println("注意: BedrockCredentialsIsolator 已优化连接池配置:");
         System.out.println("  - 同步客户端最大连接数: 50");
-        System.out.println("  - 异步客户端最大并发数: 20");
-        System.out.println("  - 连接获取超时: 60秒");
-        System.out.println("  - 最大等待队列: 50");
-        System.out.println("  - 连接复用时间: 3分钟");
-        System.out.println("  - 读取超时: 15分钟\n");
+        System.out.println("  - 异步客户端最大并发数: " + System.getProperty("bedrock.http.maxConcurrency", "5000"));
+        System.out.println("  - 连接获取超时: " + System.getProperty("bedrock.http.acquireTimeoutSeconds", "60") + "秒");
+        System.out.println("  - 最大等待队列: " + System.getProperty("bedrock.http.maxPendingAcquires", "2000"));
+        System.out.println("  - 连接复用时间: " + System.getProperty("bedrock.http.ttlMinutes", "3") + "分钟");
+        System.out.println("  - 读取超时: " + System.getProperty("bedrock.http.readTimeoutMinutes", "15") + "分钟");
+        System.out.println("  - API调用尝试超时: " + System.getProperty("bedrock.api.attemptTimeoutMinutes", "5") + "分钟");
+        System.out.println("  - API调用总超时: " + System.getProperty("bedrock.api.callTimeoutMinutes", "10") + "分钟\n");
 
         // 创建线程池
         ExecutorService executor = Executors.newFixedThreadPool(CONCURRENT_REQUESTS);
@@ -185,6 +210,7 @@ public class ConcurrentBedrockTest {
                 // 确保每个请求的活跃连接只释放一次，成功/失败只统计一次
                 AtomicBoolean connectionReleased = new AtomicBoolean(false);
                 AtomicBoolean counted = new AtomicBoolean(false);
+                AtomicReference<String> errorMessage = new AtomicReference<>();
 
                 // 记录连接开始时间
                 long connectionStartTime = System.currentTimeMillis();
@@ -239,12 +265,20 @@ public class ConcurrentBedrockTest {
                             }
 
                             String errorMsg = e.getMessage();
+                            errorMessage.set(errorMsg);
                             boolean isPoolError = errorMsg != null && (errorMsg.contains("Acquire operation took longer") ||
                                     errorMsg.contains("connection pool") || errorMsg.contains("ClosedChannelException"));
+                            boolean isTimeoutError = errorMsg != null && errorMsg.contains("HTTP request execution did not complete before the specified timeout");
+
                             if (firstCount && isPoolError) {
                                 connectionPoolErrorCount.incrementAndGet();
                             }
-                            if (isPoolError) {
+
+                            if (isTimeoutError) {
+                                System.err.printf("[请求 #%d] ✗ API调用超时 (耗时: %dms, 剩余活跃: %d) - %s\n" +
+                                        "    提示: 可通过 -Dbedrock.api.callTimeoutMinutes=15 增加超时时间\n",
+                                        requestId, responseTime, remainingActiveAfter, errorMsg);
+                            } else if (isPoolError) {
                                 System.err.printf("[请求 #%d] ✗ 连接池错误 (耗时: %dms, 剩余活跃: %d) - %s\n",
                                         requestId, responseTime, remainingActiveAfter, errorMsg);
                             } else {

@@ -34,10 +34,15 @@ public class BedrockCredentialsIsolator {
         AwsCredentialsProvider credentialsProvider = DefaultCredentialsProvider.create();
 
         // 构建客户端
+        // 允许通过系统属性配置同步客户端API超时时间
+        int syncApiCallAttemptTimeoutMinutes = Integer.getInteger("bedrock.sync.api.attemptTimeoutMinutes", 5);
+        int syncApiCallTimeoutMinutes = Integer.getInteger("bedrock.sync.api.callTimeoutMinutes", 10);
+
         BedrockRuntimeClientBuilder builder = BedrockRuntimeClient.builder()
                 .region(Region.of(region))
-                .overrideConfiguration(o -> o.apiCallAttemptTimeout(Duration.ofSeconds(60)))
-                .overrideConfiguration(o -> o.apiCallTimeout(Duration.ofSeconds(120)))
+                .overrideConfiguration(o -> o
+                        .apiCallAttemptTimeout(Duration.ofMinutes(syncApiCallAttemptTimeoutMinutes))
+                        .apiCallTimeout(Duration.ofMinutes(syncApiCallTimeoutMinutes)))
                 .httpClientBuilder(ApacheHttpClient.builder()
                         .maxConnections(50)                            // 降低最大连接数，避免连接池耗尽
                         .connectionTimeout(Duration.ofSeconds(10))     // 建立连接超时：10秒
@@ -72,10 +77,15 @@ public class BedrockCredentialsIsolator {
         }
 
         // 构建隔离的客户端
+        // 允许通过系统属性配置同步客户端API超时时间
+        int syncApiCallAttemptTimeoutMinutes = Integer.getInteger("bedrock.sync.api.attemptTimeoutMinutes", 5);
+        int syncApiCallTimeoutMinutes = Integer.getInteger("bedrock.sync.api.callTimeoutMinutes", 10);
+
         BedrockRuntimeClientBuilder builder = BedrockRuntimeClient.builder()
                 .region(Region.of(region))
-                .overrideConfiguration(o -> o.apiCallAttemptTimeout(Duration.ofSeconds(60)))
-                .overrideConfiguration(o -> o.apiCallTimeout(Duration.ofSeconds(120)))
+                .overrideConfiguration(o -> o
+                        .apiCallAttemptTimeout(Duration.ofMinutes(syncApiCallAttemptTimeoutMinutes))
+                        .apiCallTimeout(Duration.ofMinutes(syncApiCallTimeoutMinutes)))
                 .httpClientBuilder(ApacheHttpClient.builder()
                         .maxConnections(50)                            // 降低最大连接数，避免连接池耗尽
                         .connectionTimeout(Duration.ofSeconds(10))     // 建立连接超时：10秒
@@ -110,11 +120,15 @@ public class BedrockCredentialsIsolator {
         int ttlMinutes = Integer.getInteger("bedrock.http.ttlMinutes", 3);
         int maxIdleSeconds = Integer.getInteger("bedrock.http.maxIdleSeconds", 20);
 
+        // 允许通过系统属性配置API超时时间
+        int apiCallAttemptTimeoutMinutes = Integer.getInteger("bedrock.api.attemptTimeoutMinutes", 5);
+        int apiCallTimeoutMinutes = Integer.getInteger("bedrock.api.callTimeoutMinutes", 10);
+
         BedrockRuntimeAsyncClientBuilder builder = BedrockRuntimeAsyncClient.builder()
                 .region(Region.of(region))
                 .overrideConfiguration(o -> o
-                        .apiCallAttemptTimeout(Duration.ofMinutes(1)) // 单次尝试超时：2分钟
-                        .apiCallTimeout(Duration.ofMinutes(2)))       // 总超时：2分钟
+                        .apiCallAttemptTimeout(Duration.ofMinutes(apiCallAttemptTimeoutMinutes)) // 单次尝试超时（默认5分钟）
+                        .apiCallTimeout(Duration.ofMinutes(apiCallTimeoutMinutes)))       // 总超时（默认10分钟）
                 .httpClientBuilder(NettyNioAsyncHttpClient.builder()
                         // 连接池配置（可通过系统属性覆盖）
                         .maxConcurrency(maxConcurrency)                            // bedrock.http.maxConcurrency（默认20）
@@ -171,11 +185,15 @@ public class BedrockCredentialsIsolator {
         int ttlMinutes = Integer.getInteger("bedrock.http.ttlMinutes", 3);
         int maxIdleSeconds = Integer.getInteger("bedrock.http.maxIdleSeconds", 20);
 
+        // 允许通过系统属性配置API超时时间
+        int apiCallAttemptTimeoutMinutes = Integer.getInteger("bedrock.api.attemptTimeoutMinutes", 5);
+        int apiCallTimeoutMinutes = Integer.getInteger("bedrock.api.callTimeoutMinutes", 10);
+
         BedrockRuntimeAsyncClientBuilder builder = BedrockRuntimeAsyncClient.builder()
                 .region(Region.of(region))
                 .overrideConfiguration(o -> o
-                        .apiCallAttemptTimeout(Duration.ofMinutes(2)) // 单次尝试超时：2分钟
-                        .apiCallTimeout(Duration.ofMinutes(2)))       // 总超时：2分钟
+                        .apiCallAttemptTimeout(Duration.ofMinutes(apiCallAttemptTimeoutMinutes)) // 单次尝试超时（默认5分钟）
+                        .apiCallTimeout(Duration.ofMinutes(apiCallTimeoutMinutes)))       // 总超时（默认10分钟）
                 .httpClientBuilder(NettyNioAsyncHttpClient.builder()
                         // 连接池配置：进一步降低并发数，确保稳定性
 
