@@ -139,7 +139,10 @@ public class OpenAIService implements AutoCloseable {
                     AzureOpenAIConfig azureConfig = (AzureOpenAIConfig) config;
                     request.setModel(azureConfig.getDeploymentId());
                 }
-                
+
+                // 清除Bedrock专用字段，避免Azure/OpenAI不认识这些字段而返回400错误
+                request.setBedrockEnableSystemCache(null);
+
                 String response = httpClient.post("/chat/completions", request);
                 try {
                     return objectMapper.readValue(response, ChatCompletionResponse.class);
@@ -339,7 +342,10 @@ public class OpenAIService implements AutoCloseable {
             AzureOpenAIConfig azureConfig = (AzureOpenAIConfig) config;
             request.setModel(azureConfig.getDeploymentId());
         }
-        
+
+        // 清除Bedrock专用字段，避免Azure/OpenAI不认识这些字段而返回400错误
+        request.setBedrockEnableSystemCache(null);
+
         EventSource eventSource = httpClient.postStream("/chat/completions", request, new EventSourceListener() {
             private volatile boolean isDone = false;
             
@@ -396,6 +402,7 @@ public class OpenAIService implements AutoCloseable {
                 
                 try {
                     ChatCompletionChunk chunk = objectMapper.readValue(data, ChatCompletionChunk.class);
+
                     // 只要有chunk就调用回调，包括空内容的chunk
                     if (onChunk != null) {
                         onChunk.accept(chunk);

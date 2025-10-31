@@ -181,12 +181,30 @@ public class ChatCompletionResponse {
             this.promptTokens = promptTokens;
         }
 
+        /**
+         * 支持Bedrock的input_tokens字段名
+         * Bedrock使用input_tokens而不是prompt_tokens
+         */
+        @JsonProperty("input_tokens")
+        public void setInputTokens(int inputTokens) {
+            this.promptTokens = inputTokens;
+        }
+
         public int getCompletionTokens() {
             return completionTokens;
         }
 
         public void setCompletionTokens(int completionTokens) {
             this.completionTokens = completionTokens;
+        }
+
+        /**
+         * 支持Bedrock的output_tokens字段名
+         * Bedrock使用output_tokens而不是completion_tokens
+         */
+        @JsonProperty("output_tokens")
+        public void setOutputTokens(int outputTokens) {
+            this.completionTokens = outputTokens;
         }
 
         public int getTotalTokens() {

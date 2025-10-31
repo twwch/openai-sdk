@@ -106,6 +106,9 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                 } else {
                     // 处理内容 - 可能是字符串或数组
                     Object content = message.getContent();
+                    logger.debug("处理消息content: 类型={}, 是否为null={}",
+                        content != null ? content.getClass().getName() : "null", content == null);
+
                     if (content instanceof String) {
                         bedrockMessage.put("content", (String) content);
                     } else if (content instanceof ChatMessage.ContentPart[]) {
@@ -148,6 +151,8 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                                 }
 
                                 contentArray.add(textNode);
+                                logger.debug("添加文本ContentPart到contentArray: type={}, text长度={}, has_cache_control={}",
+                                    part.getType(), part.getText() != null ? part.getText().length() : 0, part.getCacheControl() != null);
                             } else if ("image_url".equals(part.getType()) && part.getImageUrl() != null) {
                                 String url = part.getImageUrl().getUrl();
                                 ObjectNode imageNode = objectMapper.createObjectNode();
@@ -202,8 +207,41 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                         }
                         
                         bedrockMessage.set("content", contentArray);
+                    } else if (content instanceof List) {
+                        // 处理List类型(Jackson反序列化可能将数组变成List)
+                        logger.warn("检测到content是List类型,尝试转换为ContentPart数组");
+                        List<?> listContent = (List<?>) content;
+                        ArrayNode contentArray = objectMapper.createArrayNode();
+
+                        for (Object item : listContent) {
+                            if (item instanceof ChatMessage.ContentPart) {
+                                ChatMessage.ContentPart part = (ChatMessage.ContentPart) item;
+                                if ("text".equals(part.getType())) {
+                                    ObjectNode textNode = objectMapper.createObjectNode();
+                                    textNode.put("type", "text");
+                                    textNode.put("text", part.getText());
+                                    if (part.getCacheControl() != null) {
+                                        ObjectNode cacheControl = objectMapper.createObjectNode();
+                                        cacheControl.put("type", part.getCacheControl().getType());
+                                        textNode.set("cache_control", cacheControl);
+                                    }
+                                    contentArray.add(textNode);
+                                } else if ("image_url".equals(part.getType()) && part.getImageUrl() != null) {
+                                    // 处理图片类型
+                                    ObjectNode imageNode = objectMapper.createObjectNode();
+                                    imageNode.put("type", "image");
+                                    // ... 图片处理逻辑可以简化或重用
+                                    logger.warn("List中包含image类型,当前简化处理");
+                                }
+                            } else {
+                                logger.warn("List中包含非ContentPart类型的对象: {}", item != null ? item.getClass().getName() : "null");
+                            }
+                        }
+
+                        bedrockMessage.set("content", contentArray);
                     } else if (content != null) {
                         // 尝试将其他类型转换为JSON
+                        logger.warn("content是未知类型,使用valueToTree序列化: {}", content.getClass().getName());
                         bedrockMessage.set("content", objectMapper.valueToTree(content));
                     }
                 }
@@ -428,61 +466,38 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
         choices.add(choice);
         response.setChoices(choices);
         
-        // 设置使用情况
-        ChatCompletionResponse.Usage usage = new ChatCompletionResponse.Usage();
-
+        // 设置使用情况 - 直接使用Jackson反序列化，自动处理字段映射
         if (responseNode.has("usage")) {
             JsonNode usageNode = responseNode.get("usage");
 
             // 打印原始usage JSON用于调试
             logger.info("原始Bedrock响应usage字段: {}", usageNode.toString());
 
-            if (usageNode.has("input_tokens")) {
-                usage.setPromptTokens(usageNode.get("input_tokens").asInt());
-            }
-            if (usageNode.has("output_tokens")) {
-                usage.setCompletionTokens(usageNode.get("output_tokens").asInt());
-            }
+            // 直接反序列化为Usage对象，Jackson会自动映射字段
+            // input_tokens -> promptTokens (通过setInputTokens方法)
+            // output_tokens -> completionTokens (通过setOutputTokens方法)
+            // cache_read_input_tokens -> cacheReadInputTokens (直接映射)
+            // cache_creation_input_tokens -> cacheCreationInputTokens (直接映射)
+            ChatCompletionResponse.Usage usage = objectMapper.treeToValue(usageNode, ChatCompletionResponse.Usage.class);
 
-            // Bedrock Prompt Caching统计 - 尝试不同的字段名
-            // 小写下划线格式
-            if (usageNode.has("cache_read_input_tokens")) {
-                int cacheReadTokens = usageNode.get("cache_read_input_tokens").asInt();
-                usage.setCacheReadInputTokens(cacheReadTokens);
-                if (cacheReadTokens > 0) {
-                    logger.info("缓存命中! 从缓存读取了 {} tokens (节省约90%成本)", cacheReadTokens);
-                }
-            }
-            // 大写驼峰格式(Converse API)
-            else if (usageNode.has("CacheReadInputTokens")) {
-                int cacheReadTokens = usageNode.get("CacheReadInputTokens").asInt();
-                usage.setCacheReadInputTokens(cacheReadTokens);
-                if (cacheReadTokens > 0) {
-                    logger.info("缓存命中! 从缓存读取了 {} tokens (节省约90%成本)", cacheReadTokens);
-                }
-            }
-
-            if (usageNode.has("cache_creation_input_tokens")) {
-                int cacheCreationTokens = usageNode.get("cache_creation_input_tokens").asInt();
-                usage.setCacheCreationInputTokens(cacheCreationTokens);
-                if (cacheCreationTokens > 0) {
-                    logger.info("创建缓存: {} tokens 已写入缓存 (成本约为标准输入的125%)", cacheCreationTokens);
-                }
-            }
-            // 大写驼峰格式(Converse API)
-            else if (usageNode.has("CacheWriteInputTokens")) {
-                int cacheCreationTokens = usageNode.get("CacheWriteInputTokens").asInt();
-                usage.setCacheCreationInputTokens(cacheCreationTokens);
-                if (cacheCreationTokens > 0) {
-                    logger.info("创建缓存: {} tokens 已写入缓存 (成本约为标准输入的125%)", cacheCreationTokens);
-                }
-            }
-
+            // 计算总token数
             usage.setTotalTokens(usage.getPromptTokens() + usage.getCompletionTokens());
+
+            // 打印缓存统计信息
+            if (usage.getCacheReadInputTokens() != null && usage.getCacheReadInputTokens() > 0) {
+                logger.info("✅ 缓存命中! 从缓存读取了 {} tokens (节省约90%成本)", usage.getCacheReadInputTokens());
+            }
+            if (usage.getCacheCreationInputTokens() != null && usage.getCacheCreationInputTokens() > 0) {
+                logger.info("⚠️  创建缓存: {} tokens 已写入缓存 (成本约为标准输入的125%)", usage.getCacheCreationInputTokens());
+            }
+
+            response.setUsage(usage);
+        } else {
+            // 如果没有usage字段,创建一个空的Usage对象
+            ChatCompletionResponse.Usage usage = new ChatCompletionResponse.Usage();
+            response.setUsage(usage);
         }
 
-        response.setUsage(usage);
-        
         return response;
     }
     
@@ -574,48 +589,20 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                                 // 打印原始流式usage JSON用于调试(message_start事件)
                                 logger.info("原始Bedrock流式响应usage字段(message_start): {}", usageNode.toString());
 
-                                ChatCompletionResponse.Usage usage = new ChatCompletionResponse.Usage();
-                                if (usageNode.has("input_tokens")) {
-                                    usage.setPromptTokens(usageNode.get("input_tokens").asInt());
-                                }
-                                if (usageNode.has("output_tokens")) {
-                                    usage.setCompletionTokens(usageNode.get("output_tokens").asInt());
-                                }
+                                // 直接反序列化为Usage对象，Jackson会自动映射所有字段
+                                ChatCompletionResponse.Usage usage = objectMapper.treeToValue(usageNode, ChatCompletionResponse.Usage.class);
 
-                                // Bedrock Prompt Caching统计 - 尝试不同的字段名
-                                // 小写下划线格式
-                                if (usageNode.has("cache_read_input_tokens")) {
-                                    int cacheReadTokens = usageNode.get("cache_read_input_tokens").asInt();
-                                    usage.setCacheReadInputTokens(cacheReadTokens);
-                                    if (cacheReadTokens > 0) {
-                                        logger.info("流式响应(message_start)缓存命中! {} tokens", cacheReadTokens);
-                                    }
-                                }
-                                // 大写驼峰格式
-                                else if (usageNode.has("CacheReadInputTokens")) {
-                                    int cacheReadTokens = usageNode.get("CacheReadInputTokens").asInt();
-                                    usage.setCacheReadInputTokens(cacheReadTokens);
-                                    if (cacheReadTokens > 0) {
-                                        logger.info("流式响应(message_start)缓存命中! {} tokens", cacheReadTokens);
-                                    }
-                                }
-
-                                if (usageNode.has("cache_creation_input_tokens")) {
-                                    int cacheCreationTokens = usageNode.get("cache_creation_input_tokens").asInt();
-                                    usage.setCacheCreationInputTokens(cacheCreationTokens);
-                                    if (cacheCreationTokens > 0) {
-                                        logger.info("流式响应(message_start)创建缓存: {} tokens", cacheCreationTokens);
-                                    }
-                                }
-                                else if (usageNode.has("CacheWriteInputTokens")) {
-                                    int cacheCreationTokens = usageNode.get("CacheWriteInputTokens").asInt();
-                                    usage.setCacheCreationInputTokens(cacheCreationTokens);
-                                    if (cacheCreationTokens > 0) {
-                                        logger.info("流式响应(message_start)创建缓存: {} tokens", cacheCreationTokens);
-                                    }
-                                }
-
+                                // 计算总token数
                                 usage.setTotalTokens(usage.getPromptTokens() + usage.getCompletionTokens());
+
+                                // 打印缓存统计信息
+                                if (usage.getCacheReadInputTokens() != null && usage.getCacheReadInputTokens() > 0) {
+                                    logger.info("流式响应(message_start)缓存命中! {} tokens", usage.getCacheReadInputTokens());
+                                }
+                                if (usage.getCacheCreationInputTokens() != null && usage.getCacheCreationInputTokens() > 0) {
+                                    logger.info("流式响应(message_start)创建缓存: {} tokens", usage.getCacheCreationInputTokens());
+                                }
+
                                 completionChunk.setUsage(usage);
                             }
                             
@@ -649,7 +636,7 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                     } else if ("message_stop".equals(type)) {
                         choice.setFinishReason("stop");
                     } else if ("message_delta".equals(type)) {
-                        // message_delta事件只包含output_tokens的增量
+                        // message_delta事件通常只包含output_tokens的增量
                         // input_tokens和cache信息已经在message_start中提供
                         if (chunkNode.has("usage")) {
                             JsonNode usageNode = chunkNode.get("usage");
@@ -657,55 +644,20 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                             // 打印原始流式usage JSON用于调试
                             logger.info("原始Bedrock流式响应usage字段(message_delta): {}", usageNode.toString());
 
-                            // 注意: message_delta通常只包含output_tokens
-                            // input_tokens和cache信息在message_start事件中
-                            ChatCompletionResponse.Usage usage = new ChatCompletionResponse.Usage();
+                            // 直接反序列化为Usage对象，Jackson会自动映射所有字段
+                            ChatCompletionResponse.Usage usage = objectMapper.treeToValue(usageNode, ChatCompletionResponse.Usage.class);
 
-                            // message_delta中通常只有output_tokens
-                            if (usageNode.has("output_tokens")) {
-                                usage.setCompletionTokens(usageNode.get("output_tokens").asInt());
-                            }
-
-                            // 某些情况下可能包含input_tokens,如果有就使用
-                            if (usageNode.has("input_tokens")) {
-                                usage.setPromptTokens(usageNode.get("input_tokens").asInt());
-                            }
-
-                            // Bedrock Prompt Caching统计 - 尝试不同的字段名
-                            // 小写下划线格式
-                            if (usageNode.has("cache_read_input_tokens")) {
-                                int cacheReadTokens = usageNode.get("cache_read_input_tokens").asInt();
-                                usage.setCacheReadInputTokens(cacheReadTokens);
-                                if (cacheReadTokens > 0) {
-                                    logger.info("流式响应(message_delta)缓存命中! 从缓存读取了 {} tokens", cacheReadTokens);
-                                }
-                            }
-                            // 大写驼峰格式(Converse API)
-                            else if (usageNode.has("CacheReadInputTokens")) {
-                                int cacheReadTokens = usageNode.get("CacheReadInputTokens").asInt();
-                                usage.setCacheReadInputTokens(cacheReadTokens);
-                                if (cacheReadTokens > 0) {
-                                    logger.info("流式响应(message_delta)缓存命中! 从缓存读取了 {} tokens", cacheReadTokens);
-                                }
-                            }
-
-                            if (usageNode.has("cache_creation_input_tokens")) {
-                                int cacheCreationTokens = usageNode.get("cache_creation_input_tokens").asInt();
-                                usage.setCacheCreationInputTokens(cacheCreationTokens);
-                                if (cacheCreationTokens > 0) {
-                                    logger.info("流式响应(message_delta)创建缓存: {} tokens", cacheCreationTokens);
-                                }
-                            }
-                            // 大写驼峰格式(Converse API)
-                            else if (usageNode.has("CacheWriteInputTokens")) {
-                                int cacheCreationTokens = usageNode.get("CacheWriteInputTokens").asInt();
-                                usage.setCacheCreationInputTokens(cacheCreationTokens);
-                                if (cacheCreationTokens > 0) {
-                                    logger.info("流式响应(message_delta)创建缓存: {} tokens", cacheCreationTokens);
-                                }
-                            }
-
+                            // 计算总token数
                             usage.setTotalTokens(usage.getPromptTokens() + usage.getCompletionTokens());
+
+                            // 打印缓存统计信息（如果message_delta中有的话，通常没有）
+                            if (usage.getCacheReadInputTokens() != null && usage.getCacheReadInputTokens() > 0) {
+                                logger.info("流式响应(message_delta)缓存命中! 从缓存读取了 {} tokens", usage.getCacheReadInputTokens());
+                            }
+                            if (usage.getCacheCreationInputTokens() != null && usage.getCacheCreationInputTokens() > 0) {
+                                logger.info("流式响应(message_delta)创建缓存: {} tokens", usage.getCacheCreationInputTokens());
+                            }
+
                             completionChunk.setUsage(usage);
                         }
                         
