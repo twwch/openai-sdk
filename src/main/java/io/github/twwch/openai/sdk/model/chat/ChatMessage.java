@@ -262,6 +262,13 @@ public class ChatMessage {
         private String text;
         @JsonProperty("image_url")
         private ImageUrl imageUrl;
+
+        /**
+         * Cache control for Bedrock prompt caching
+         * 用于Bedrock的prompt caching功能
+         */
+        @JsonProperty("cache_control")
+        private CacheControl cacheControl;
         
         public String getType() {
             return type;
@@ -286,12 +293,36 @@ public class ChatMessage {
         public void setImageUrl(ImageUrl imageUrl) {
             this.imageUrl = imageUrl;
         }
-        
+
+        public CacheControl getCacheControl() {
+            return cacheControl;
+        }
+
+        public void setCacheControl(CacheControl cacheControl) {
+            this.cacheControl = cacheControl;
+        }
+
         // 便捷创建方法
         public static ContentPart text(String text) {
             ContentPart part = new ContentPart();
             part.setType("text");
             part.setText(text);
+            return part;
+        }
+
+        /**
+         * 创建带缓存控制的文本内容
+         * @param text 文本内容
+         * @param enableCache 是否启用缓存
+         * @return 内容部分
+         */
+        public static ContentPart textWithCache(String text, boolean enableCache) {
+            ContentPart part = new ContentPart();
+            part.setType("text");
+            part.setText(text);
+            if (enableCache) {
+                part.setCacheControl(CacheControl.ephemeral());
+            }
             return part;
         }
         
@@ -311,21 +342,55 @@ public class ChatMessage {
         public static class ImageUrl {
             private String url;
             private String detail; // "auto", "low", "high"
-            
+
             public String getUrl() {
                 return url;
             }
-            
+
             public void setUrl(String url) {
                 this.url = url;
             }
-            
+
             public String getDetail() {
                 return detail;
             }
-            
+
             public void setDetail(String detail) {
                 this.detail = detail;
+            }
+        }
+
+        /**
+         * 缓存控制 - 用于Bedrock Prompt Caching
+         * AWS Bedrock支持ephemeral类型的缓存,可节省90%的输入token成本
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public static class CacheControl {
+            private String type;
+
+            public CacheControl() {
+            }
+
+            public CacheControl(String type) {
+                this.type = type;
+            }
+
+            public String getType() {
+                return type;
+            }
+
+            public void setType(String type) {
+                this.type = type;
+            }
+
+            /**
+             * 创建ephemeral类型的缓存控制
+             * Bedrock会缓存带此标记的内容,缓存有效期5分钟
+             * @return CacheControl对象
+             */
+            public static CacheControl ephemeral() {
+                return new CacheControl("ephemeral");
             }
         }
     }

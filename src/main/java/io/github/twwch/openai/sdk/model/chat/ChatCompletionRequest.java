@@ -139,6 +139,13 @@ public class ChatCompletionRequest {
     @JsonProperty("web_search_options")
     private WebSearchOptions webSearchOptions;
 
+    /**
+     * Enable prompt caching for Bedrock system messages
+     * 为Bedrock的system消息启用prompt caching
+     */
+    @JsonProperty("bedrock_enable_system_cache")
+    private Boolean bedrockEnableSystemCache;
+
     public ChatCompletionRequest() {
         this.messages = new ArrayList<>();
         // 不设置默认值，让各个服务自己处理
@@ -441,6 +448,14 @@ public class ChatCompletionRequest {
 
     public void setWebSearchOptions(WebSearchOptions webSearchOptions) {
         this.webSearchOptions = webSearchOptions;
+    }
+
+    public Boolean getBedrockEnableSystemCache() {
+        return bedrockEnableSystemCache;
+    }
+
+    public void setBedrockEnableSystemCache(Boolean bedrockEnableSystemCache) {
+        this.bedrockEnableSystemCache = bedrockEnableSystemCache;
     }
 
     /**

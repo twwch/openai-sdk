@@ -140,12 +140,38 @@ public class ChatCompletionResponse {
     public static class Usage {
         @JsonProperty("prompt_tokens")
         private int promptTokens;
-        
+
         @JsonProperty("completion_tokens")
         private int completionTokens;
-        
+
         @JsonProperty("total_tokens")
         private int totalTokens;
+
+        /**
+         * Bedrock Prompt Caching: 从缓存读取的token数量
+         * 这些token享受90%折扣
+         */
+        @JsonProperty("cache_read_input_tokens")
+        private Integer cacheReadInputTokens;
+
+        /**
+         * Bedrock Prompt Caching: 写入缓存的token数量
+         * 首次处理时比标准输入token价格高约25%
+         */
+        @JsonProperty("cache_creation_input_tokens")
+        private Integer cacheCreationInputTokens;
+
+        /**
+         * Azure OpenAI: prompt tokens详细信息(包含缓存信息)
+         */
+        @JsonProperty("prompt_tokens_details")
+        private PromptTokensDetails promptTokensDetails;
+
+        /**
+         * Azure OpenAI: completion tokens详细信息
+         */
+        @JsonProperty("completion_tokens_details")
+        private CompletionTokensDetails completionTokensDetails;
 
         public int getPromptTokens() {
             return promptTokens;
@@ -169,6 +195,106 @@ public class ChatCompletionResponse {
 
         public void setTotalTokens(int totalTokens) {
             this.totalTokens = totalTokens;
+        }
+
+        /**
+         * 获取缓存读取的token数量
+         * 兼容Bedrock和Azure两种格式
+         */
+        public Integer getCacheReadInputTokens() {
+            // 优先返回Bedrock格式
+            if (cacheReadInputTokens != null) {
+                return cacheReadInputTokens;
+            }
+            // 然后尝试Azure格式
+            if (promptTokensDetails != null && promptTokensDetails.getCachedTokens() != null) {
+                return promptTokensDetails.getCachedTokens();
+            }
+            return null;
+        }
+
+        public void setCacheReadInputTokens(Integer cacheReadInputTokens) {
+            this.cacheReadInputTokens = cacheReadInputTokens;
+        }
+
+        public Integer getCacheCreationInputTokens() {
+            return cacheCreationInputTokens;
+        }
+
+        public void setCacheCreationInputTokens(Integer cacheCreationInputTokens) {
+            this.cacheCreationInputTokens = cacheCreationInputTokens;
+        }
+
+        public PromptTokensDetails getPromptTokensDetails() {
+            return promptTokensDetails;
+        }
+
+        public void setPromptTokensDetails(PromptTokensDetails promptTokensDetails) {
+            this.promptTokensDetails = promptTokensDetails;
+        }
+
+        public CompletionTokensDetails getCompletionTokensDetails() {
+            return completionTokensDetails;
+        }
+
+        public void setCompletionTokensDetails(CompletionTokensDetails completionTokensDetails) {
+            this.completionTokensDetails = completionTokensDetails;
+        }
+    }
+
+    /**
+     * Azure OpenAI prompt tokens详细信息
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class PromptTokensDetails {
+        @JsonProperty("cached_tokens")
+        private Integer cachedTokens;
+
+        @JsonProperty("audio_tokens")
+        private Integer audioTokens;
+
+        public Integer getCachedTokens() {
+            return cachedTokens;
+        }
+
+        public void setCachedTokens(Integer cachedTokens) {
+            this.cachedTokens = cachedTokens;
+        }
+
+        public Integer getAudioTokens() {
+            return audioTokens;
+        }
+
+        public void setAudioTokens(Integer audioTokens) {
+            this.audioTokens = audioTokens;
+        }
+    }
+
+    /**
+     * Azure OpenAI completion tokens详细信息
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class CompletionTokensDetails {
+        @JsonProperty("reasoning_tokens")
+        private Integer reasoningTokens;
+
+        @JsonProperty("audio_tokens")
+        private Integer audioTokens;
+
+        public Integer getReasoningTokens() {
+            return reasoningTokens;
+        }
+
+        public void setReasoningTokens(Integer reasoningTokens) {
+            this.reasoningTokens = reasoningTokens;
+        }
+
+        public Integer getAudioTokens() {
+            return audioTokens;
+        }
+
+        public void setAudioTokens(Integer audioTokens) {
+            this.audioTokens = audioTokens;
         }
     }
 }

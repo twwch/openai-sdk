@@ -13,6 +13,7 @@ This SDK provides a simple and intuitive way to integrate AI services into your 
 - Chat completion API support
 - Streaming responses support
 - Function calling and tool use support
+- **Prompt Caching support** - Save up to 90-100% on input token costs
 - Configurable HTTP client
 - Comprehensive error handling
 - Type-safe request/response models
@@ -32,7 +33,7 @@ Add the following dependency to your `pom.xml`:
 <dependency>
     <groupId>io.github.twwch</groupId>
     <artifactId>openai-sdk</artifactId>
-    <version>1.1.55</version>
+    <version>1.1.56</version>
 </dependency>
 ```
 
@@ -398,6 +399,128 @@ public class StreamExample {
     }
 }
 ```
+
+## Prompt Caching (Cost Optimization)
+
+This SDK supports Prompt Caching for both AWS Bedrock and Azure OpenAI, enabling **up to 90-100% cost savings** on repeated input tokens.
+
+### Quick Comparison
+
+| Feature | AWS Bedrock | Azure OpenAI |
+|---------|-------------|--------------|
+| **Setup Complexity** | Medium - Requires code markers | Simple - Fully automatic |
+| **Cost Savings** | 90% | 90-100% |
+| **Control** | Fine-grained (system/content) | Automatic detection |
+| **API Version** | Any | 2024-10-01-preview+ |
+| **Min Tokens** | 1024-4096 | 1024 |
+| **Documentation** | [BEDROCK_PROMPT_CACHING.md](BEDROCK_PROMPT_CACHING.md) | [AZURE_PROMPT_CACHING.md](AZURE_PROMPT_CACHING.md) |
+
+### AWS Bedrock Prompt Caching
+
+```java
+import io.github.twwch.openai.sdk.OpenAI;
+import io.github.twwch.openai.sdk.model.chat.*;
+import java.util.Arrays;
+
+// Method 1: Cache system message
+ChatCompletionRequest request = new ChatCompletionRequest();
+request.setModel("anthropic.claude-3-5-sonnet-20241022-v2:0");
+request.setBedrockEnableSystemCache(true); // Enable caching
+request.setMessages(Arrays.asList(
+    ChatMessage.system("Long system prompt... [1024+ tokens]"),
+    ChatMessage.user("Question")
+));
+
+// Method 2: Fine-grained content caching
+ChatMessage.user(
+    ChatMessage.ContentPart.textWithCache("Long context...", true),
+    ChatMessage.ContentPart.text("Question about the context")
+)
+
+// Check cache statistics
+ChatCompletionResponse response = client.createChatCompletion(request);
+ChatCompletionResponse.Usage usage = response.getUsage();
+
+if (usage.getCacheCreationInputTokens() != null && usage.getCacheCreationInputTokens() > 0) {
+    System.out.println("Cache created: " + usage.getCacheCreationInputTokens() + " tokens");
+}
+if (usage.getCacheReadInputTokens() != null && usage.getCacheReadInputTokens() > 0) {
+    System.out.println("Cache hit: " + usage.getCacheReadInputTokens() + " tokens (90% savings!)");
+}
+```
+
+### Azure OpenAI Prompt Caching
+
+```java
+import io.github.twwch.openai.sdk.OpenAI;
+import io.github.twwch.openai.sdk.model.chat.*;
+
+// Only requirement: Use correct API version
+OpenAI client = OpenAI.azure(
+    apiKey,
+    resourceName,
+    deploymentId,
+    "2024-10-01-preview"  // Key: Use caching-enabled version
+);
+
+// Use normally - Azure handles caching automatically
+ChatCompletionRequest request = new ChatCompletionRequest();
+request.setMessages(Arrays.asList(
+    ChatMessage.system("Long system prompt... [1024+ tokens]"),
+    ChatMessage.user("Question")
+));
+
+ChatCompletionResponse response = client.createChatCompletion(request);
+
+// Check cache statistics (same as Bedrock)
+if (response.getUsage().getCacheReadInputTokens() != null) {
+    System.out.println("Cache hit: " + response.getUsage().getCacheReadInputTokens() + " tokens");
+}
+```
+
+### When to Use Prompt Caching
+
+**Best suited for:**
+- ✅ RAG applications (repeated document retrieval)
+- ✅ Code review (same codebase analyzed multiple times)
+- ✅ Long conversation history
+- ✅ Fixed system prompts
+- ✅ Multiple queries on same context
+
+**Not suitable for:**
+- ❌ Completely different content each time
+- ❌ Content less than 1024 tokens
+- ❌ Only 1-2 API calls (higher cost for first request)
+
+### Cost Analysis Example (AWS Bedrock)
+
+Assuming standard input price: $0.003/1K tokens
+
+| Requests | Without Cache | With Cache | Savings |
+|----------|--------------|------------|---------|
+| 1 call   | $0.030       | $0.0375    | -$0.0075 (higher) |
+| 3 calls  | $0.090       | $0.0435    | $0.0465 (52%) |
+| 10 calls | $0.300       | $0.0675    | $0.2325 (78%) |
+| 100 calls| $3.000       | $0.3375    | $2.6625 (89%) |
+
+### Testing Prompt Caching
+
+```bash
+# Run Bedrock prompt caching tests
+mvn test -Dtest=BedrockPromptCachingTest
+
+# With custom configuration
+mvn test -Dtest=BedrockPromptCachingTest \
+  -Dbedrock.region=us-west-2 \
+  -Dbedrock.modelId=anthropic.claude-3-7-sonnet-20250219-v1:0
+```
+
+### Learn More
+
+- [Bedrock Prompt Caching Guide](BEDROCK_PROMPT_CACHING.md) - Detailed usage, best practices, cost analysis
+- [Azure Prompt Caching Guide](AZURE_PROMPT_CACHING.md) - Azure-specific automatic caching
+- [Prompt Caching Summary](PROMPT_CACHING_SUMMARY.md) - Quick reference for both platforms
+- [Cache Behavior Explained](CACHE_BEHAVIOR_EXPLAINED.md) - Debugging and troubleshooting
 
 ### Streaming with Usage Tracking
 
