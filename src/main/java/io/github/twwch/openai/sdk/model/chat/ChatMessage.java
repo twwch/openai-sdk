@@ -48,22 +48,30 @@ public class ChatMessage {
         this.content = content;
     }
     
-    // 便捷方法：获取字符串内容
-    // 注意：添加@JsonIgnore防止序列化
+    /**
+     * 便捷方法：获取字符串内容
+     * 注意：添加@JsonIgnore防止序列化
+     *
+     * @return 消息的文本内容，如果content为null或无法转换为字符串则返回空字符串（不返回null）
+     */
     @com.fasterxml.jackson.annotation.JsonIgnore
     public String getContentAsString() {
+        if (content == null) {
+            return "";
+        }
         if (content instanceof String) {
             return (String) content;
         } else if (content instanceof ContentPart[]) {
             StringBuilder sb = new StringBuilder();
             for (ContentPart part : (ContentPart[]) content) {
-                if ("text".equals(part.getType()) && part.getText() != null) {
+                if (part != null && "text".equals(part.getType()) && part.getText() != null) {
                     sb.append(part.getText());
                 }
             }
             return sb.toString();
         }
-        return null;
+        // 其他未知类型，返回空字符串而不是null
+        return "";
     }
 
     public String getName() {
