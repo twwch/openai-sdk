@@ -360,30 +360,35 @@ public class OpenAIService implements AutoCloseable {
                         if (response.message() != null && !response.message().isEmpty()) {
                             errorMessage += " - " + response.message();
                         }
-                        
-                        // 记录错误详情
-                        logger.error("OpenAI API 流式请求错误 - 状态码: {}, URL: {}", 
-                            response.code(), response.request().url());
+
+                        // 尝试读取响应体获取API返回的原始错误信息
+                        String responseBody = null;
+                        try {
+                            if (response.body() != null) {
+                                responseBody = response.body().string();
+                                if (responseBody != null && !responseBody.isEmpty()) {
+                                    logger.error("OpenAI API 流式请求错误 - 状态码: {}, URL: {}, API原始错误响应: {}",
+                                        response.code(), response.request().url(), responseBody);
+                                    errorMessage += "\nAPI原始错误响应: " + responseBody;
+                                }
+                            }
+                        } catch (IOException e) {
+                            logger.warn("读取错误响应体失败: {}", e.getMessage());
+                        }
+
+                        // 如果没有读取到响应体，仍然记录错误
+                        if (responseBody == null || responseBody.isEmpty()) {
+                            logger.error("OpenAI API 流式请求错误 - 状态码: {}, URL: {}",
+                                response.code(), response.request().url());
+                        }
+
                         try {
                             String requestJson = objectMapper.writeValueAsString(request);
                             logger.debug("请求参数: {}", requestJson);
                         } catch (JsonProcessingException je) {
                             logger.debug("请求参数: [无法序列化]", je);
                         }
-                        
-                        // 尝试读取响应体获取更多错误信息
-                        try {
-                            if (response.body() != null) {
-                                String body = response.body().string();
-                                if (!body.isEmpty()) {
-                                    logger.error("错误响应: {}", body);
-                                    errorMessage += " - " + body;
-                                }
-                            }
-                        } catch (IOException e) {
-                            // 忽略读取错误
-                        }
-                        
+
                         onError.accept(new OpenAIException(errorMessage));
                     }
                 }
@@ -426,33 +431,52 @@ public class OpenAIService implements AutoCloseable {
                     if (t instanceof java.net.SocketException || t instanceof java.io.IOException) {
                         String message = t.getMessage();
                         if (message != null && (
-                            message.contains("Socket closed") || 
+                            message.contains("Socket closed") ||
                             message.contains("stream was reset: CANCEL") ||
                             message.contains("canceled") ||
                             message.contains("Stream closed"))) {
                             isIgnorableError = true;
                         }
                     }
-                    
+
                     if (!isIgnorableError && onError != null) {
                         // 构建更详细的错误信息
                         String errorMessage = "流式请求失败";
+                        String responseBody = null;
+
                         if (response != null) {
                             errorMessage += " (状态码: " + response.code() + ")";
                             if (response.message() != null && !response.message().isEmpty()) {
                                 errorMessage += " - " + response.message();
                             }
-                            
-                            // 记录错误详情
-                            logger.error("OpenAI API 流式请求失败 - 状态码: {}, URL: {}", 
-                                response.code(), response.request().url(), t);
+
+                            // 尝试读取响应体获取API返回的原始错误信息
+                            try {
+                                if (response.body() != null) {
+                                    responseBody = response.body().string();
+                                    if (responseBody != null && !responseBody.isEmpty()) {
+                                        logger.error("OpenAI API 流式请求失败 - 状态码: {}, URL: {}, API原始错误响应: {}",
+                                            response.code(), response.request().url(), responseBody);
+                                        errorMessage += "\nAPI原始错误响应: " + responseBody;
+                                    }
+                                }
+                            } catch (IOException e) {
+                                logger.warn("读取错误响应体失败: {}", e.getMessage());
+                            }
+
+                            // 如果没有读取到响应体，仍然记录错误
+                            if (responseBody == null || responseBody.isEmpty()) {
+                                logger.error("OpenAI API 流式请求失败 - 状态码: {}, URL: {}",
+                                    response.code(), response.request().url(), t);
+                            }
+
                             try {
                                 String requestJson = objectMapper.writeValueAsString(request);
                                 logger.debug("请求参数: {}", requestJson);
                             } catch (JsonProcessingException je) {
                                 logger.debug("请求参数: [无法序列化]", je);
                             }
-                            }
+                        }
                         if (t != null && t.getMessage() != null) {
                             errorMessage += ": " + t.getMessage();
                         }
