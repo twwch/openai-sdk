@@ -19,6 +19,12 @@ import java.util.*;
  */
 public class ClaudeModelAdapter implements BedrockModelAdapter {
     private static final Logger logger = LoggerFactory.getLogger(ClaudeModelAdapter.class);
+
+    /**
+     * AWS Bedrock Claude 模型的 cache_control 块最大数量限制
+     * 参考: https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
+     */
+    private static final int MAX_CACHE_CONTROL_BLOCKS = 4;
     
     @Override
     public boolean supports(String modelId) {
@@ -382,7 +388,10 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                 logger.debug("设置 tool_choice: [无法序列化]");
             }
         }
-        
+
+        // 限制 cache_control 块的数量，AWS Bedrock Claude 最多允许 4 个
+        limitCacheControlBlocks(bedrockRequest);
+
         return objectMapper.writeValueAsString(bedrockRequest);
     }
     
@@ -702,6 +711,70 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                 return "length";
             default:
                 return claudeReason;
+        }
+    }
+
+    /**
+     * 限制 cache_control 块的数量，AWS Bedrock Claude 最多允许 4 个
+     * 如果超过限制，从后往前移除多余的 cache_control 块
+     * 优先保留 system prompt 的缓存（如果有的话）
+     *
+     * @param bedrockRequest 请求节点
+     */
+    private void limitCacheControlBlocks(ObjectNode bedrockRequest) {
+        List<ObjectNode> nodesWithCacheControl = new ArrayList<>();
+
+        // 收集所有包含 cache_control 的节点
+        collectNodesWithCacheControl(bedrockRequest, nodesWithCacheControl);
+
+        int totalCount = nodesWithCacheControl.size();
+        if (totalCount <= MAX_CACHE_CONTROL_BLOCKS) {
+            if (totalCount > 0) {
+                logger.debug("cache_control 块数量: {}, 未超过限制 ({})", totalCount, MAX_CACHE_CONTROL_BLOCKS);
+            }
+            return;
+        }
+
+        // 超过限制，需要移除多余的 cache_control
+        int toRemove = totalCount - MAX_CACHE_CONTROL_BLOCKS;
+        logger.warn("cache_control 块数量 ({}) 超过 AWS Bedrock 限制 ({})，将移除 {} 个",
+                totalCount, MAX_CACHE_CONTROL_BLOCKS, toRemove);
+
+        // 从后往前移除（保留前面的，通常 system prompt 在前面更重要）
+        for (int i = totalCount - 1; i >= MAX_CACHE_CONTROL_BLOCKS; i--) {
+            ObjectNode node = nodesWithCacheControl.get(i);
+            node.remove("cache_control");
+            logger.debug("移除了第 {} 个 cache_control 块", i + 1);
+        }
+
+        logger.info("已自动移除 {} 个 cache_control 块，保留前 {} 个", toRemove, MAX_CACHE_CONTROL_BLOCKS);
+    }
+
+    /**
+     * 递归收集所有包含 cache_control 的 ObjectNode
+     *
+     * @param node   当前节点
+     * @param result 结果列表
+     */
+    private void collectNodesWithCacheControl(JsonNode node, List<ObjectNode> result) {
+        if (node == null) {
+            return;
+        }
+
+        if (node.isObject()) {
+            ObjectNode objectNode = (ObjectNode) node;
+            if (objectNode.has("cache_control")) {
+                result.add(objectNode);
+            }
+            // 递归处理所有子节点
+            Iterator<JsonNode> elements = objectNode.elements();
+            while (elements.hasNext()) {
+                collectNodesWithCacheControl(elements.next(), result);
+            }
+        } else if (node.isArray()) {
+            for (JsonNode element : node) {
+                collectNodesWithCacheControl(element, result);
+            }
         }
     }
 }

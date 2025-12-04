@@ -169,17 +169,16 @@ public class BedrockService implements AutoCloseable {
             return modelAdapter.convertResponse(responseBody, request, objectMapper);
 
         } catch (Exception e) {
-            logger.error("Bedrock请求失败", e);
+            logger.error("Bedrock请求失败 - 模型: {}", config.getModelId(), e);
             if (bedrockRequest != null) {
                 logger.error("请求体: {}", bedrockRequest);
             }
             // 如果是AWS服务异常，尝试获取更多信息
             if (e instanceof SdkServiceException) {
                 SdkServiceException sdkException = (SdkServiceException) e;
-                logger.error("状态码: {}", sdkException.statusCode());
-                logger.error("错误消息: {}", sdkException.getMessage());
+                logger.error("状态码: {}, 错误消息: {}", sdkException.statusCode(), sdkException.getMessage());
             }
-            throw new OpenAIException("Bedrock请求失败: " + e.getMessage(), e);
+            throw new OpenAIException("Bedrock请求失败 [模型: " + config.getModelId() + "]: " + e.getMessage(), e);
         }
     }
 
@@ -213,8 +212,8 @@ public class BedrockService implements AutoCloseable {
                     message.contains("timeout"))) {
                     
                     if (attempt < maxRetries - 1) {
-                        logger.warn("流式请求失败，尝试重试 ({}/{}): {}", 
-                                   attempt + 1, maxRetries, message);
+                        logger.warn("流式请求失败 - 模型: {}，尝试重试 ({}/{}): {}",
+                                   config.getModelId(), attempt + 1, maxRetries, message);
                         
                         // 如果是连接池相关错误，在第3次重试时重建客户端
                         if (attempt == 2 && message != null && 
@@ -243,7 +242,7 @@ public class BedrockService implements AutoCloseable {
         }
         
         // 所有重试都失败
-        throw new OpenAIException("流式请求失败，已重试 " + maxRetries + " 次", lastException);
+        throw new OpenAIException("流式请求失败 [模型: " + config.getModelId() + "]，已重试 " + maxRetries + " 次", lastException);
     }
     
     /**
@@ -368,11 +367,11 @@ public class BedrockService implements AutoCloseable {
                         }
                     })
                     .onError(throwable -> {
-                        logger.error("Bedrock流式请求失败: {}", throwable.getMessage());
+                        logger.error("Bedrock流式请求失败 - 模型: {}: {}", config.getModelId(), throwable.getMessage());
                         if (!hasError.getAndSet(true)) {
                             if (onError != null) {
                                 try {
-                                    onError.accept(new OpenAIException("Bedrock流式请求失败: " + throwable.getMessage(), throwable));
+                                    onError.accept(new OpenAIException("Bedrock流式请求失败 [模型: " + config.getModelId() + "]: " + throwable.getMessage(), throwable));
                                 } catch (Exception e) {
                                     logger.error("错误回调执行失败", e);
                                 }
@@ -389,7 +388,7 @@ public class BedrockService implements AutoCloseable {
             sdkFuture.whenComplete((result, throwable) -> {
                 if (throwable != null) {
                     if (!hasError.getAndSet(true)) {
-                        logger.error("SDK流式请求失败", throwable);
+                        logger.error("SDK流式请求失败 - 模型: {}", config.getModelId(), throwable);
                         streamCompletion.completeExceptionally(throwable);
                     }
                 } else if (!isCompleted.get()) {
@@ -402,9 +401,9 @@ public class BedrockService implements AutoCloseable {
             streamCompletion.orTimeout(120, TimeUnit.SECONDS)
                 .exceptionally(throwable -> {
                     if (throwable instanceof java.util.concurrent.TimeoutException) {
-                        logger.error("流式请求超时（120秒）");
+                        logger.error("流式请求超时（120秒） - 模型: {}", config.getModelId());
                         if (!hasError.getAndSet(true) && onError != null) {
-                            onError.accept(new OpenAIException("流式请求超时", throwable));
+                            onError.accept(new OpenAIException("流式请求超时 [模型: " + config.getModelId() + "]", throwable));
                         }
                     }
                     return null;
@@ -413,13 +412,13 @@ public class BedrockService implements AutoCloseable {
             return streamCompletion;
 
         } catch (Exception e) {
-            logger.error("Bedrock流式请求失败", e);
+            logger.error("Bedrock流式请求失败 - 模型: {}", config.getModelId(), e);
             if (bedrockRequest != null) {
                 logger.error("请求体: {}", bedrockRequest);
             }
             if (onError != null) {
                 try {
-                    onError.accept(new OpenAIException("Bedrock流式请求失败: " + e.getMessage(), e));
+                    onError.accept(new OpenAIException("Bedrock流式请求失败 [模型: " + config.getModelId() + "]: " + e.getMessage(), e));
                 } catch (Exception callbackError) {
                     logger.error("错误回调执行失败", callbackError);
                 }
