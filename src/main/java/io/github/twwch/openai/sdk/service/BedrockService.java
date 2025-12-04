@@ -2,6 +2,7 @@ package io.github.twwch.openai.sdk.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.twwch.openai.sdk.BedrockConfig;
+import io.github.twwch.openai.sdk.exception.ErrorLogger;
 import io.github.twwch.openai.sdk.exception.OpenAIException;
 import io.github.twwch.openai.sdk.model.ModelInfo;
 import io.github.twwch.openai.sdk.model.chat.ChatCompletionChunk;
@@ -169,16 +170,16 @@ public class BedrockService implements AutoCloseable {
             return modelAdapter.convertResponse(responseBody, request, objectMapper);
 
         } catch (Exception e) {
-            logger.error("Bedrock请求失败 - 模型: {}", config.getModelId(), e);
             if (bedrockRequest != null) {
-                logger.error("请求体: {}", bedrockRequest);
+                logger.debug("请求体: {}", bedrockRequest);
             }
-            // 如果是AWS服务异常，尝试获取更多信息
+            // 如果是AWS服务异常，获取状态码
+            int statusCode = 0;
             if (e instanceof SdkServiceException) {
-                SdkServiceException sdkException = (SdkServiceException) e;
-                logger.error("状态码: {}, 错误消息: {}", sdkException.statusCode(), sdkException.getMessage());
+                statusCode = ((SdkServiceException) e).statusCode();
             }
-            throw new OpenAIException("Bedrock请求失败 [模型: " + config.getModelId() + "]: " + e.getMessage(), e);
+            throw ErrorLogger.logAndCreateException(logger, OpenAIException.Provider.BEDROCK,
+                    config.getModelId(), "请求失败", statusCode > 0 ? statusCode : 0, e);
         }
     }
 
@@ -212,8 +213,8 @@ public class BedrockService implements AutoCloseable {
                     message.contains("timeout"))) {
                     
                     if (attempt < maxRetries - 1) {
-                        logger.warn("流式请求失败 - 模型: {}，尝试重试 ({}/{}): {}",
-                                   config.getModelId(), attempt + 1, maxRetries, message);
+                        ErrorLogger.logWarn(logger, OpenAIException.Provider.BEDROCK, config.getModelId(),
+                                String.format("流式请求失败，尝试重试 (%d/%d)", attempt + 1, maxRetries), e);
                         
                         // 如果是连接池相关错误，在第3次重试时重建客户端
                         if (attempt == 2 && message != null && 
@@ -242,7 +243,8 @@ public class BedrockService implements AutoCloseable {
         }
         
         // 所有重试都失败
-        throw new OpenAIException("流式请求失败 [模型: " + config.getModelId() + "]，已重试 " + maxRetries + " 次", lastException);
+        throw ErrorLogger.createException(OpenAIException.Provider.BEDROCK, config.getModelId(),
+                "流式请求失败，已重试 " + maxRetries + " 次", lastException);
     }
     
     /**
@@ -367,11 +369,12 @@ public class BedrockService implements AutoCloseable {
                         }
                     })
                     .onError(throwable -> {
-                        logger.error("Bedrock流式请求失败 - 模型: {}: {}", config.getModelId(), throwable.getMessage());
+                        OpenAIException exception = ErrorLogger.logAndCreateException(logger,
+                                OpenAIException.Provider.BEDROCK, config.getModelId(), "流式请求失败", throwable);
                         if (!hasError.getAndSet(true)) {
                             if (onError != null) {
                                 try {
-                                    onError.accept(new OpenAIException("Bedrock流式请求失败 [模型: " + config.getModelId() + "]: " + throwable.getMessage(), throwable));
+                                    onError.accept(exception);
                                 } catch (Exception e) {
                                     logger.error("错误回调执行失败", e);
                                 }
@@ -388,7 +391,8 @@ public class BedrockService implements AutoCloseable {
             sdkFuture.whenComplete((result, throwable) -> {
                 if (throwable != null) {
                     if (!hasError.getAndSet(true)) {
-                        logger.error("SDK流式请求失败 - 模型: {}", config.getModelId(), throwable);
+                        ErrorLogger.logAndCreateException(logger, OpenAIException.Provider.BEDROCK,
+                                config.getModelId(), "SDK流式请求失败", throwable);
                         streamCompletion.completeExceptionally(throwable);
                     }
                 } else if (!isCompleted.get()) {
@@ -401,9 +405,10 @@ public class BedrockService implements AutoCloseable {
             streamCompletion.orTimeout(120, TimeUnit.SECONDS)
                 .exceptionally(throwable -> {
                     if (throwable instanceof java.util.concurrent.TimeoutException) {
-                        logger.error("流式请求超时（120秒） - 模型: {}", config.getModelId());
+                        OpenAIException exception = ErrorLogger.logAndCreateException(logger,
+                                OpenAIException.Provider.BEDROCK, config.getModelId(), "流式请求超时（120秒）", throwable);
                         if (!hasError.getAndSet(true) && onError != null) {
-                            onError.accept(new OpenAIException("流式请求超时 [模型: " + config.getModelId() + "]", throwable));
+                            onError.accept(exception);
                         }
                     }
                     return null;
@@ -412,13 +417,14 @@ public class BedrockService implements AutoCloseable {
             return streamCompletion;
 
         } catch (Exception e) {
-            logger.error("Bedrock流式请求失败 - 模型: {}", config.getModelId(), e);
             if (bedrockRequest != null) {
-                logger.error("请求体: {}", bedrockRequest);
+                logger.debug("请求体: {}", bedrockRequest);
             }
+            OpenAIException exception = ErrorLogger.logAndCreateException(logger,
+                    OpenAIException.Provider.BEDROCK, config.getModelId(), "流式请求失败", e);
             if (onError != null) {
                 try {
-                    onError.accept(new OpenAIException("Bedrock流式请求失败 [模型: " + config.getModelId() + "]: " + e.getMessage(), e));
+                    onError.accept(exception);
                 } catch (Exception callbackError) {
                     logger.error("错误回调执行失败", callbackError);
                 }
