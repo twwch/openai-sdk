@@ -10,7 +10,7 @@
 <dependency>
     <groupId>io.github.twwch</groupId>
     <artifactId>openai-sdk</artifactId>
-    <version>1.1.60</version>
+    <version>1.1.61</version>
 </dependency>
 ```
 

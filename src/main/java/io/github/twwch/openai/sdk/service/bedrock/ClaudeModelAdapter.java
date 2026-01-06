@@ -234,10 +234,51 @@ public class ClaudeModelAdapter implements BedrockModelAdapter {
                                     contentArray.add(textNode);
                                 } else if ("image_url".equals(part.getType()) && part.getImageUrl() != null) {
                                     // 处理图片类型
+                                    String url = part.getImageUrl().getUrl();
                                     ObjectNode imageNode = objectMapper.createObjectNode();
                                     imageNode.put("type", "image");
-                                    // ... 图片处理逻辑可以简化或重用
-                                    logger.warn("List中包含image类型,当前简化处理");
+                                    ObjectNode sourceNode = objectMapper.createObjectNode();
+
+                                    String base64Data = null;
+                                    if (url.startsWith("data:image/")) {
+                                        // 已经是带data URI前缀的base64图片
+                                        base64Data = ImageUtils.compressBase64Image(url, 5 * 1024 * 1024 - 100 * 1024);
+                                    } else if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                                        // 可能是没有data URI前缀的原始base64字符串
+                                        try {
+                                            byte[] imageBytes = java.util.Base64.getDecoder().decode(url);
+                                            String mimeType = ImageUtils.detectMimeType(imageBytes);
+                                            base64Data = "data:" + mimeType + ";base64," + url;
+                                            base64Data = ImageUtils.compressBase64Image(base64Data, 5 * 1024 * 1024 - 100 * 1024);
+                                            logger.debug("List: Detected raw base64 image, added data URI prefix with mime type: {}", mimeType);
+                                        } catch (IllegalArgumentException e) {
+                                            logger.error("List: Invalid image format (not a valid URL or base64)");
+                                            continue;
+                                        }
+                                    } else {
+                                        // HTTP URL - 需要下载
+                                        try {
+                                            base64Data = ImageUtils.downloadAndConvertToBase64(url);
+                                        } catch (Exception e) {
+                                            logger.error("List: Failed to download image: {}", url, e);
+                                            continue;
+                                        }
+                                    }
+
+                                    if (base64Data != null) {
+                                        String[] imgParts = base64Data.split(",", 2);
+                                        if (imgParts.length == 2) {
+                                            String mediaType = imgParts[0].substring(5, imgParts[0].indexOf(";"));
+                                            sourceNode.put("type", "base64");
+                                            sourceNode.put("media_type", mediaType);
+                                            sourceNode.put("data", imgParts[1]);
+                                            imageNode.set("source", sourceNode);
+                                            contentArray.add(imageNode);
+                                            logger.debug("List: Successfully added image to contentArray");
+                                        } else {
+                                            logger.error("List: Failed to parse base64 data for image");
+                                        }
+                                    }
                                 }
                             } else {
                                 logger.warn("List中包含非ContentPart类型的对象: {}", item != null ? item.getClass().getName() : "null");
